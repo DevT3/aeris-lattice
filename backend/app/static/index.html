@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AERIS Lattice — Demo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0a0a0f;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .header h1 {
+      font-size: 2.2rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+
+    .header p {
+      color: #94a3b8;
+      font-size: 0.95rem;
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 32px;
+      font-size: 0.85rem;
+      color: #94a3b8;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      background: #22c55e;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .model-badges {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 32px;
+    }
+
+    .badge {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      border: 1px solid;
+    }
+
+    .badge-openai   { background: #0a1628; border-color: #10a37f; color: #10a37f; }
+    .badge-groq     { background: #0f0a1e; border-color: #f55036; color: #f55036; }
+    .badge-mistral  { background: #1a0f00; border-color: #fa8200; color: #fa8200; }
+    .badge-gemini   { background: #0a1628; border-color: #4285f4; color: #4285f4; }
+    .badge-local    { background: #0a1a0a; border-color: #22c55e; color: #22c55e; }
+
+    .input-section {
+      width: 100%;
+      max-width: 760px;
+      margin-bottom: 24px;
+    }
+
+    textarea {
+      width: 100%;
+      background: #13131a;
+      border: 1px solid #2d2d3d;
+      border-radius: 12px;
+      padding: 16px;
+      color: #e2e8f0;
+      font-size: 0.95rem;
+      resize: vertical;
+      min-height: 100px;
+      outline: none;
+      transition: border-color 0.2s;
+      font-family: inherit;
+    }
+
+    textarea:focus { border-color: #6366f1; }
+
+    .btn {
+      margin-top: 12px;
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      border: none;
+      border-radius: 10px;
+      color: white;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+
+    .btn:hover { opacity: 0.9; }
+    .btn:active { transform: scale(0.99); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .quick-prompts {
+      width: 100%;
+      max-width: 760px;
+      margin-bottom: 32px;
+    }
+
+    .quick-prompts p {
+      font-size: 0.8rem;
+      color: #64748b;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip {
+      padding: 6px 14px;
+      background: #13131a;
+      border: 1px solid #2d2d3d;
+      border-radius: 20px;
+      font-size: 0.82rem;
+      color: #94a3b8;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .chip:hover { border-color: #6366f1; color: #a78bfa; }
+
+    .result { width: 100%; max-width: 760px; display: none; }
+
+    .verdict-card {
+      border-radius: 14px;
+      padding: 24px;
+      margin-bottom: 20px;
+      border: 1px solid transparent;
+    }
+
+    .verdict-delivered { background: #0d1f12; border-color: #166534; }
+    .verdict-silent    { background: #1a0d0d; border-color: #7f1d1d; }
+
+    .verdict-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .verdict-delivered .verdict-label { color: #22c55e; }
+    .verdict-silent .verdict-label    { color: #ef4444; }
+
+    .verdict-message {
+      font-size: 1rem;
+      line-height: 1.7;
+      color: #e2e8f0;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .metric-card {
+      background: #13131a;
+      border: 1px solid #2d2d3d;
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .metric-label {
+      font-size: 0.75rem;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+
+    .metric-value { font-size: 1.4rem; font-weight: 700; color: #e2e8f0; }
+    .metric-sub   { font-size: 0.8rem; color: #94a3b8; margin-top: 4px; }
+
+    .models-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .model-card {
+      background: #13131a;
+      border: 1px solid #2d2d3d;
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .model-name {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #2d2d3d;
+    }
+
+    .model-name-openai  { color: #10a37f; }
+    .model-name-groq    { color: #f55036; }
+    .model-name-mistral { color: #fa8200; }
+    .model-name-gemini  { color: #4285f4; }
+    .model-name-local   { color: #22c55e; }
+
+    .model-response {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      line-height: 1.6;
+      max-height: 140px;
+      overflow-y: auto;
+    }
+
+    .model-error { color: #ef4444; font-style: italic; }
+
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 40px;
+      color: #64748b;
+    }
+
+    .spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid #2d2d3d;
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .failed-models {
+      margin-top: 12px;
+      padding: 10px 14px;
+      background: #1a0d0d;
+      border: 1px solid #7f1d1d33;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      color: #f87171;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>AERIS Lattice</h1>
+    <p>Inference-time reliability architecture — multi-model epistemic validation</p>
+  </div>
+
+  <div class="status-bar">
+    <div class="status-dot"></div>
+    <span>System online — 5-model consensus engine active</span>
+  </div>
+
+  <div class="model-badges">
+    <span class="badge badge-openai">GPT-4o-mini</span>
+    <span class="badge badge-groq">Groq Llama 3.3</span>
+    <span class="badge badge-mistral">Mistral Small</span>
+    <span class="badge badge-gemini">Gemini 2.5 Flash</span>
+    <span class="badge badge-local">Local LLM</span>
+  </div>
+
+  <div class="input-section">
+    <textarea id="prompt" placeholder="Ask anything. AERIS will validate across 5 models before responding..."></textarea>
+    <button class="btn" onclick="submitPrompt()">Validate with AERIS →</button>
+  </div>
+
+  <div class="quick-prompts">
+    <p>Quick test prompts</p>
+    <div class="chips">
+      <div class="chip" onclick="setPrompt('Can I stop antibiotics early if I feel better?')">Medical risk</div>
+      <div class="chip" onclick="setPrompt('Is this investment guaranteed to return 40% annually?')">Financial risk</div>
+      <div class="chip" onclick="setPrompt('Can I ignore a formal IRS tax audit notice?')">Legal risk</div>
+      <div class="chip" onclick="setPrompt('What is the capital of France?')">Safe baseline</div>
+    </div>
+  </div>
+
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <p>Querying GPT · Groq · Mistral · Gemini · Local LLM — calculating consensus...</p>
+  </div>
+
+  <div class="result" id="result"></div>
+
+  <script>
+    function setPrompt(text) {
+      document.getElementById('prompt').value = text;
+    }
+
+    async function submitPrompt() {
+      const prompt = document.getElementById('prompt').value.trim();
+      if (!prompt) return;
+
+      const btn   = document.querySelector('.btn');
+      const loading = document.getElementById('loading');
+      const result  = document.getElementById('result');
+
+      btn.disabled = true;
+      loading.style.display = 'block';
+      result.style.display  = 'none';
+
+      try {
+        const response = await fetch('/ask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt })
+        });
+        const data = await response.json();
+        renderResult(data);
+      } catch (err) {
+        result.innerHTML = `<div class="verdict-card verdict-silent">
+          <div class="verdict-label">Connection Error</div>
+          <div class="verdict-message">Could not reach AERIS backend.</div>
+        </div>`;
+        result.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        loading.style.display = 'none';
+      }
+    }
+
+    function renderResult(data) {
+      const result       = document.getElementById('result');
+      const isSilent     = data.status === 'silent_state';
+      const consensus    = data.consensus || {};
+      const confidence   = data.confidence || {};
+      const allResponses = data.all_model_responses || {};
+
+      const modelLabels = {
+        openai:  "GPT-4o-mini",
+        groq:    "Groq Llama 3.3",
+        mistral: "Mistral Small",
+        gemini:  "Gemini 2.5 Flash",
+        local:   "Local LLM (Llama 3.2)"
+      };
+
+      const modelColors = {
+        openai:  "model-name-openai",
+        groq:    "model-name-groq",
+        mistral: "model-name-mistral",
+        gemini:  "model-name-gemini",
+        local:   "model-name-local"
+      };
+
+      const errorPrefixes = [
+        "OpenAI error", "Groq error", "Mistral error",
+        "Gemini error", "Local model error"
+      ];
+
+      let html = '';
+
+      // Verdict
+      if (isSilent) {
+        html += `<div class="verdict-card verdict-silent">
+          <div class="verdict-label">⚠ Silent State Activated</div>
+          <div class="verdict-message">${data.message || 'Insufficient reliability for a safe response.'}</div>
+        </div>`;
+      } else {
+        html += `<div class="verdict-card verdict-delivered">
+          <div class="verdict-label">✓ Response Delivered</div>
+          <div class="verdict-message">${data.final_response || ''}</div>
+        </div>`;
+      }
+
+      // Metrics
+      const totalModels   = Object.keys(allResponses).length || 5;
+      const respondedCount = (consensus.models_responded || []).length;
+
+      html += `<div class="metrics">
+        <div class="metric-card">
+          <div class="metric-label">Consensus</div>
+          <div class="metric-value">${consensus.consensus_score ?? '—'}%</div>
+          <div class="metric-sub">${consensus.agreement ?? ''}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Confidence</div>
+          <div class="metric-value">${confidence.score ?? '—'}%</div>
+          <div class="metric-sub">${confidence.reason ?? ''}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Models Active</div>
+          <div class="metric-value">${respondedCount}/${totalModels}</div>
+          <div class="metric-sub">${(consensus.models_responded || []).join(', ')}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Verdict</div>
+          <div class="metric-value" style="font-size:1rem">${isSilent ? '🔴 Silent' : '🟢 Safe'}</div>
+          <div class="metric-sub">${consensus.reason ?? ''}</div>
+        </div>
+      </div>`;
+
+      // Failed models warning
+      if ((consensus.models_failed || []).length > 0) {
+        html += `<div class="failed-models">
+          ⚠ Models offline: ${consensus.models_failed.join(', ')} — consensus calculated from available models
+        </div>`;
+      }
+
+      // Model response cards
+      if (Object.keys(allResponses).length > 0) {
+        html += `<div class="models-grid">`;
+        for (const [model, resp] of Object.entries(allResponses)) {
+          const isError = errorPrefixes.some(p => resp.startsWith(p));
+          html += `<div class="model-card">
+            <div class="model-name ${modelColors[model] || ''}">
+              ${modelLabels[model] || model}
+            </div>
+            <div class="model-response ${isError ? 'model-error' : ''}">
+              ${resp}
+            </div>
+          </div>`;
+        }
+        html += `</div>`;
+      }
+
+      result.innerHTML = html;
+      result.style.display = 'block';
+    }
+
+    document.getElementById('prompt').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && e.ctrlKey) submitPrompt();
+    });
+  </script>
+</body>
+</html>
