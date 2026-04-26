@@ -1,15 +1,17 @@
 # AERIS Lattice
 
-> Adaptive Epistemic Reasoning & Integrity System
 > Inference-time reliability architecture for Large Language Models (LLMs)
 
-AERIS Lattice is a middleware reliability layer designed to improve trust, contradiction handling, and safe decision-making in LLM systems.
+[![Python](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.110-009688.svg)](https://fastapi.tiangolo.com/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Status](https://img.shields.io/badge/status-MVP-orange.svg)]()
 
-Instead of relying on raw model output alone, AERIS introduces reflective validation, confidence scoring, contradiction detection, and controlled refusal states before responses reach the user.
+AERIS Lattice is a middleware reliability layer that intercepts LLM output before it reaches the user and validates it across multiple reliability layers.
 
-Its core principle is simple:
+If a response cannot be trusted, AERIS refuses to deliver it.
 
-**AI should know when it might be wrong.**
+Instead of optimizing only for answers, AERIS optimizes for safe decisions.
 
 ---
 
@@ -19,77 +21,33 @@ Modern LLMs are powerful, but they share a critical weakness:
 
 They often generate confident answers even when uncertainty exists.
 
-In casual conversations, this may be harmless.
+In casual conversations, this is inconvenient.
 
-In medicine, finance, legal systems, cybersecurity, and autonomous tools, unreliable output becomes a serious operational risk.
+In high-risk domains such as medicine, finance, legal systems, cybersecurity, and autonomous workflows, unreliable output can cause serious harm.
 
-Most current systems optimize for response generation.
+Most systems optimize for response generation.
 
-AERIS Lattice optimizes for response reliability.
+AERIS Lattice introduces a validation layer between model output and human action.
 
 ---
 
 ## Solution
 
-AERIS Lattice acts as an inference-time validation layer between the user and the language model.
-
-It does not replace the model.
-
-It evaluates the model before output is delivered.
+Every prompt passes through a structured inference-time validation pipeline before a response is delivered.
 
 This includes:
 
+* Multi-model validation
+* Consensus scoring
+* Contradiction detection
 * Confidence scoring
 * Reflective self-review
-* Contradiction detection
 * Silent-state refusal
-* Ethical boundary enforcement
+* Decision logging
 
-The objective is not stronger AI.
-
-The objective is safer and more reliable AI.
-
----
-
-## Core Components
-
-### Confidence Engine
-
-Assigns a reliability score to each response based on certainty, ambiguity, and contextual risk.
-
-Not all mistakes carry equal consequences.
-
----
-
-### Reflective Loop
-
-Triggers a second-pass review when confidence falls below threshold.
-
-The model is required to re-evaluate its own answer before delivery.
-
----
-
-### Contradiction Lattice
-
-Detects internal contradictions, unsafe certainty, logical conflicts, and policy violations.
-
-This creates structural validation before output reaches the user.
-
----
-
-### Silent State
-
-When reliability remains below safe thresholds, the system intentionally refuses response.
+If reliability falls below threshold, the response is suppressed and replaced with a structured refusal.
 
 Silence is treated as a valid safety mechanism.
-
----
-
-### Ethical Anchor
-
-Maintains stable reasoning boundaries for high-risk domains such as healthcare, legal systems, and finance.
-
-The goal is outcome protection, not just output quality.
 
 ---
 
@@ -98,62 +56,84 @@ The goal is outcome protection, not just output quality.
 ```text
 User Prompt
    ↓
-AERIS Lattice
+[ GPT-4o-mini · Claude Haiku · Gemini Flash ]
    ↓
-LLM Response
+Consensus Engine
+   ↓
+Contradiction Lattice
    ↓
 Confidence Engine
    ↓
 Reflective Loop
    ↓
-Contradiction Lattice
-   ↓
-Silent State / Final Safe Output
+Silent State / Final Delivery
 ```
 
 ---
 
-## MVP Scope (v0.1)
+## Core Validation Layers
 
-Current prototype includes:
-
-* FastAPI backend skeleton
-* `/ask` endpoint
-* LLM service integration
-* Confidence scoring engine
-* Reflective validation flow
-* Basic contradiction detection
-* Silent State refusal handling
-* Decision logging system
+| Layer                 | Purpose                                               | Failure Action         |
+| --------------------- | ----------------------------------------------------- | ---------------------- |
+| Consensus Engine      | Measures inter-model agreement                        | Silent State           |
+| Contradiction Lattice | Detects unsafe certainty and logical conflicts        | Silent State           |
+| Confidence Engine     | Assigns reliability score based on risk and ambiguity | Score penalty          |
+| Reflective Loop       | Re-evaluates low-confidence responses                 | Second-pass validation |
+| Silent State          | Refuses unreliable output                             | Structured refusal     |
 
 ---
 
-## Tech Stack
+## Project Structure
 
-### Current
-
-* Python
-* FastAPI
-* OpenAI API
-* Pydantic
-* Python Dotenv
-
-### Planned
-
-* PostgreSQL
-* Multi-model validation
-* Consensus Engine
-* Domain-specific safety layers
-* Enterprise deployment architecture
+```text
+aeris-lattice/
+├── backend/
+│   └── app/
+│       ├── main.py
+│       ├── config.py
+│       │
+│       ├── core/
+│       │   ├── consensus_engine.py
+│       │   ├── confidence_engine.py
+│       │   ├── contradiction_lattice.py
+│       │   ├── reflective_loop.py
+│       │   ├── silent_state.py
+│       │   └── logger.py
+│       │
+│       ├── services/
+│       │   └── llm_service.py
+│       │
+│       └── models/
+│           └── request_models.py
+│
+├── docs/
+│   └── vision.md
+│
+├── diagrams/
+├── tests/
+├── decision_log.txt
+├── requirements.txt
+├── roadmap.md
+└── README.md
+```
 
 ---
 
-## Local Development
+## Quickstart
+
+### Prerequisites
+
+* Python 3.11+
+* OpenAI API key
+* Anthropic API key
+* Google Gemini API key
+
+---
 
 ### Clone Repository
 
 ```bash
-git clone https://github.com/your-username/aeris-lattice.git
+git clone https://github.com/YOUR_USERNAME/aeris-lattice.git
 cd aeris-lattice
 ```
 
@@ -171,7 +151,7 @@ python -m venv venv
 venv\Scripts\activate
 ```
 
-#### Mac/Linux
+#### macOS / Linux
 
 ```bash
 source venv/bin/activate
@@ -187,12 +167,20 @@ pip install -r requirements.txt
 
 ---
 
-### Configure Environment Variables
+### Environment Configuration
 
 Create a `.env` file in the project root:
 
+```bash
+cp .env.example .env
+```
+
+Update `.env`:
+
 ```env
-OPENAI_API_KEY=your_api_key_here
+OPENAI_API_KEY=your_openai_key
+ANTHROPIC_API_KEY=your_anthropic_key
+GEMINI_API_KEY=your_gemini_key
 ```
 
 ---
@@ -200,6 +188,7 @@ OPENAI_API_KEY=your_api_key_here
 ### Run Development Server
 
 ```bash
+export PYTHONPATH=$(pwd)
 uvicorn backend.app.main:app --reload
 ```
 
@@ -209,7 +198,7 @@ Default local endpoint:
 http://127.0.0.1:8000
 ```
 
-Swagger docs:
+Swagger documentation:
 
 ```text
 http://127.0.0.1:8000/docs
@@ -217,61 +206,161 @@ http://127.0.0.1:8000/docs
 
 ---
 
-## Roadmap
+## Available Endpoints
 
-### Phase 1
-
-* Core middleware architecture
-* Reflection and contradiction checks
-* Safe refusal state
-* Local prototype validation
-
-### Phase 2
-
-* Persistent logging
-* PostgreSQL integration
-* Cross-model validation
-* Confidence-weight optimization
-
-### Phase 3
-
-* Production deployment
-* Enterprise integrations
-* High-risk domain specialization
-* Compliance and audit architecture
+| Endpoint | Method | Description                              |
+| -------- | ------ | ---------------------------------------- |
+| `/`      | GET    | Health check                             |
+| `/ask`   | POST   | Submit prompt for reliability validation |
+| `/docs`  | GET    | Swagger UI                               |
+| `/demo`  | GET    | Visual demonstration interface           |
 
 ---
 
-## Long-Term Vision
+## API Example
 
-AERIS Lattice is designed to be model-agnostic and deployable across:
+### Request
 
-* OpenAI
-* Anthropic
-* Gemini
-* Open-source LLMs
-* Internal enterprise AI systems
+```bash
+curl -X POST "http://127.0.0.1:8000/ask" \
+-H "Content-Type: application/json" \
+-d '{
+  "prompt": "Can I stop taking antibiotics early?"
+}'
+```
 
-The goal is to create a standard reliability layer for AI systems operating in high-consequence environments.
+---
 
-Not smarter models.
+### Response — Silent State
 
-Safer decisions.
+```json
+{
+  "status": "silent_state",
+  "message": "Insufficient reliability for a safe response. Please consult a qualified professional.",
+  "consensus": {
+    "consensus_score": 45,
+    "agreement": "low",
+    "reason": "2 of 3 models expressed uncertainty"
+  }
+}
+```
+
+---
+
+### Response — Delivered
+
+```json
+{
+  "final_response": "The capital of France is Paris.",
+  "confidence": {
+    "score": 90,
+    "reason": "Response structure appears stable",
+    "domain": "general"
+  },
+  "contradiction_check": {
+    "contradiction": false,
+    "reason": "No structural contradiction detected"
+  },
+  "consensus": {
+    "consensus_score": 100,
+    "agreement": "high",
+    "models_responded": [
+      "openai",
+      "claude",
+      "gemini"
+    ]
+  }
+}
+```
+
+---
+
+## Development
+
+### Run Tests
+
+```bash
+pytest tests/
+```
+
+---
+
+### View Decision Logs
+
+```bash
+cat decision_log.txt
+```
+
+---
+
+## Environment Variables
+
+| Variable            | Required | Description              |
+| ------------------- | -------- | ------------------------ |
+| `OPENAI_API_KEY`    | Yes      | OpenAI API access        |
+| `ANTHROPIC_API_KEY` | Yes      | Anthropic API access     |
+| `GEMINI_API_KEY`    | Yes      | Google Gemini API access |
 
 ---
 
 ## Status
 
-**Version:** v0.1
-**Stage:** Active Prototype Development
+**Current Stage:** MVP Prototype
+**Deployment Status:** Local Development
+**Production Ready:** No
+
+This project is under active development.
+
+---
+
+## Design Philosophy
+
+Most AI systems are optimized to answer.
+
+AERIS Lattice is optimized to know when not to.
+
+Silence is treated as a valid safety mechanism.
+
+That difference matters.
+
+---
+
+## Disclaimer
+
+AERIS Lattice is a reliability middleware layer.
+
+It does not replace licensed medical, legal, financial, or security professionals.
+
+Its purpose is to reduce unsafe output, not to provide professional certification or guarantees.
+
+---
+
+## Roadmap
+
+See [`roadmap.md`](roadmap.md) for the full development roadmap.
+
+Current focus:
+
+* Core middleware architecture
+* Reflection and contradiction checks
+* Multi-model validation
+* Persistent decision logging
+* Safe refusal mechanisms
+
+---
+
+## License
+
+MIT License
+
+See [LICENSE](LICENSE) for details.
 
 ---
 
 ## Author
 
-Thomas Villa
+Tomás Villa
 Independent Research & Development
-
 Colombia
 
 ---
@@ -279,11 +368,3 @@ Colombia
 ## Website
 
 https://aerislattice.com
-
----
-
-## Philosophy
-
-Most AI systems are optimized to answer.
-
-AERIS Lattice is optimized to know when not to.
