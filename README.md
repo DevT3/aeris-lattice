@@ -133,7 +133,7 @@ aeris-lattice/
 ### Clone Repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/aeris-lattice.git
+git clone https://github.com/DevT3/aeris-lattice.git
 cd aeris-lattice
 ```
 
