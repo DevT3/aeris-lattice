@@ -1,4 +1,5 @@
 AERIS Lattice
+
 Adaptive Epistemic Reasoning & Integrity System
 
 AERIS Lattice is an inference-time reliability architecture for Large Language Models (LLMs) designed to improve trust, contradiction handling, and safe decision-making.
