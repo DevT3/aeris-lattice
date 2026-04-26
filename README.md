@@ -1,117 +1,99 @@
 # AERIS Lattice
 
-> Inference-time reliability architecture for Large Language Models (LLMs)
+> Inference-time reliability architecture for large language models.
 
-[![Python](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.110-009688.svg)](https://fastapi.tiangolo.com/)
+[![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg)](https://fastapi.tiangolo.com/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/status-MVP-orange.svg)]()
+[![Models](https://img.shields.io/badge/models-5--arbiter_consensus-purple.svg)]()
 
-AERIS Lattice is a middleware reliability layer that intercepts LLM output before it reaches the user and validates it across multiple reliability layers.
+AERIS Lattice sits between the user and any LLM. Before a response reaches the user, it passes through five sequential validation layers across five independent model arbiters. If reliability falls below threshold at any layer — AERIS goes silent.
 
-If a response cannot be trusted, AERIS refuses to deliver it.
-
-Instead of optimizing only for answers, AERIS optimizes for safe decisions.
-
----
-
-## Problem
-
-Modern LLMs are powerful, but they share a critical weakness:
-
-They often generate confident answers even when uncertainty exists.
-
-In casual conversations, this is inconvenient.
-
-In high-risk domains such as medicine, finance, legal systems, cybersecurity, and autonomous workflows, unreliable output can cause serious harm.
-
-Most systems optimize for response generation.
-
-AERIS Lattice introduces a validation layer between model output and human action.
+**The core premise:** in high-stakes domains, a structured refusal is safer than a confident wrong answer.
 
 ---
 
-## Solution
+## The problem
 
-Every prompt passes through a structured inference-time validation pipeline before a response is delivered.
+LLMs are deployed in medicine, finance, law, and autonomous systems with no validation layer between model output and human action.
 
-This includes:
+- Models assert incorrect medical information with high apparent confidence
+- Models provide legal guidance that contradicts applicable law  
+- Models hallucinate citations, statistics, and expert consensus
+- No single model knows when it is wrong
 
-* Multi-model validation
-* Consensus scoring
-* Contradiction detection
-* Confidence scoring
-* Reflective self-review
-* Silent-state refusal
-* Decision logging
+Current mitigations — prompt engineering, fine-tuning, RLHF — operate at training time. They reduce failure rates but cannot eliminate them. A system that hallucinates 1% of the time causes harm at scale.
 
-If reliability falls below threshold, the response is suppressed and replaced with a structured refusal.
-
-Silence is treated as a valid safety mechanism.
+**The gap:** there is no production-grade, model-agnostic validation layer that intercepts unreliable output at inference time.
 
 ---
 
-## System Flow
+## How it works
 
-```text
+Every prompt passes through a five-layer validation pipeline before any response is delivered:
+
+```
 User Prompt
-   ↓
-[ GPT-4o-mini · Claude Haiku · Gemini Flash ]
-   ↓
-Consensus Engine
-   ↓
-Contradiction Lattice
-   ↓
-Confidence Engine
-   ↓
-Reflective Loop
-   ↓
-Silent State / Final Delivery
+    ↓
+┌─────────────────────────────────────────────────────┐
+│  GPT-4o-mini · Groq Llama 3.3 · Mistral Small      │
+│  Gemini 2.5 Flash · Local LLM (Llama 3.2)          │  ← Parallel model queries
+└─────────────────────────────────────────────────────┘
+    ↓
+Consensus Engine          — inter-model agreement scoring
+    ↓
+Contradiction Lattice     — absolute certainty claim detection
+    ↓
+Confidence Engine         — domain-aware linguistic scoring
+    ↓
+Reflective Loop           — low-confidence re-evaluation
+    ↓
+Silent State / Delivery   — structured refusal or safe output
 ```
 
----
-
-## Core Validation Layers
-
-| Layer                 | Purpose                                               | Failure Action         |
-| --------------------- | ----------------------------------------------------- | ---------------------- |
-| Consensus Engine      | Measures inter-model agreement                        | Silent State           |
-| Contradiction Lattice | Detects unsafe certainty and logical conflicts        | Silent State           |
-| Confidence Engine     | Assigns reliability score based on risk and ambiguity | Score penalty          |
-| Reflective Loop       | Re-evaluates low-confidence responses                 | Second-pass validation |
-| Silent State          | Refuses unreliable output                             | Structured refusal     |
+If any layer fails its threshold — the response is suppressed. The user receives a structured refusal, not an unreliable answer.
 
 ---
 
-## Project Structure
+## Validation layers
 
-```text
+| Layer | Trigger | Action |
+|---|---|---|
+| **Consensus Engine** | Model agreement < 60% | Silent state |
+| **Contradiction Lattice** | Absolute claims: *always, never, guaranteed, certain* | Silent state |
+| **Confidence Engine** | High-risk domain or uncertain language detected | Score penalty (cap at 55) |
+| **Reflective Loop** | Confidence score < 70 | Re-evaluate response |
+| **Silent State** | Score < 70 after reflection | Structured refusal |
+
+---
+
+## Architecture
+
+```
 aeris-lattice/
 ├── backend/
 │   └── app/
-│       ├── main.py
-│       ├── config.py
-│       │
+│       ├── main.py                       # FastAPI app, request routing, pipeline orchestration
+│       ├── config.py                     # Environment config, threshold constants
 │       ├── core/
-│       │   ├── consensus_engine.py
-│       │   ├── confidence_engine.py
-│       │   ├── contradiction_lattice.py
-│       │   ├── reflective_loop.py
-│       │   ├── silent_state.py
-│       │   └── logger.py
-│       │
+│       │   ├── consensus_engine.py       # Multi-model agreement scoring
+│       │   ├── confidence_engine.py      # Domain-aware confidence scoring
+│       │   ├── contradiction_lattice.py  # Absolute claim detection
+│       │   ├── reflective_loop.py        # Low-confidence re-evaluation
+│       │   ├── silent_state.py           # Structured refusal response
+│       │   └── logger.py                # Append-only decision audit logging
 │       ├── services/
-│       │   └── llm_service.py
-│       │
-│       └── models/
-│           └── request_models.py
-│
+│       │   └── llm_service.py           # OpenAI, Groq, Mistral, Gemini, Local clients
+│       ├── models/
+│       │   └── request_models.py        # Pydantic request/response schemas
+│       └── static/
+│           └── index.html               # Visual demo interface
 ├── docs/
-│   └── vision.md
-│
-├── diagrams/
-├── tests/
-├── decision_log.txt
+│   └── vision.md                        # Problem statement, architecture decisions
+├── diagrams/                            # Architecture diagrams
+├── tests/                               # Test suite
+├── decision_log.txt                     # Append-only audit trail (gitignored)
 ├── requirements.txt
 ├── roadmap.md
 └── README.md
@@ -123,115 +105,73 @@ aeris-lattice/
 
 ### Prerequisites
 
-* Python 3.11+
-* OpenAI API key
-* Anthropic API key
-* Google Gemini API key
+- Python 3.11+
+- API keys: OpenAI, Groq, Mistral, Google Gemini
+- [Ollama](https://ollama.com) installed locally (for local LLM arbiter)
 
----
-
-### Clone Repository
+### Installation
 
 ```bash
 git clone https://github.com/DevT3/aeris-lattice.git
 cd aeris-lattice
-```
 
----
-
-### Create Virtual Environment
-
-```bash
 python -m venv venv
-```
+source venv/Scripts/activate   # Windows Git Bash
+# source venv/bin/activate     # macOS / Linux
 
-#### Windows
-
-```bash
-venv\Scripts\activate
-```
-
-#### macOS / Linux
-
-```bash
-source venv/bin/activate
-```
-
----
-
-### Install Dependencies
-
-```bash
 pip install -r requirements.txt
 ```
 
----
+### Configuration
 
-### Environment Configuration
-
-Create a `.env` file in the project root:
+Create your `.env` file:
 
 ```bash
 cp .env.example .env
 ```
 
-Update `.env`:
+Edit `.env`:
 
 ```env
-OPENAI_API_KEY=your_openai_key
-ANTHROPIC_API_KEY=your_anthropic_key
-GEMINI_API_KEY=your_gemini_key
+OPENAI_API_KEY=sk-...
+GROQ_API_KEY=gsk_...
+MISTRAL_API_KEY=...
+GEMINI_API_KEY=AI...
 ```
 
----
+For the local LLM arbiter, pull a model via Ollama:
 
-### Run Development Server
+```bash
+ollama pull llama3.2
+```
+
+### Run
 
 ```bash
 export PYTHONPATH=$(pwd)
 uvicorn backend.app.main:app --reload
 ```
 
-Default local endpoint:
-
-```text
-http://127.0.0.1:8000
-```
-
-Swagger documentation:
-
-```text
-http://127.0.0.1:8000/docs
-```
+| Endpoint | Method | Description |
+|---|---|---|
+| `/` | GET | Health check |
+| `/ask` | POST | Submit prompt for validation |
+| `/docs` | GET | Swagger UI |
+| `/demo` | GET | Visual demo interface |
 
 ---
 
-## Available Endpoints
+## API
 
-| Endpoint | Method | Description                              |
-| -------- | ------ | ---------------------------------------- |
-| `/`      | GET    | Health check                             |
-| `/ask`   | POST   | Submit prompt for reliability validation |
-| `/docs`  | GET    | Swagger UI                               |
-| `/demo`  | GET    | Visual demonstration interface           |
-
----
-
-## API Example
-
-### Request
+**Submit a prompt for validation:**
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/ask" \
--H "Content-Type: application/json" \
--d '{
-  "prompt": "Can I stop taking antibiotics early?"
-}'
+curl -X POST http://127.0.0.1:8000/ask \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Can I stop taking antibiotics early if I feel better?"}'
 ```
 
----
-
-### Response — Silent State
+**Response — silent state (high-risk prompt):**
 
 ```json
 {
@@ -240,18 +180,16 @@ curl -X POST "http://127.0.0.1:8000/ask" \
   "consensus": {
     "consensus_score": 45,
     "agreement": "low",
-    "reason": "2 of 3 models expressed uncertainty"
+    "reason": "2 of 5 models expressed uncertainty"
   }
 }
 ```
 
----
-
-### Response — Delivered
+**Response — delivered (safe prompt):**
 
 ```json
 {
-  "final_response": "The capital of France is Paris.",
+  "final_response": "The capital of France is Paris...",
   "confidence": {
     "score": 90,
     "reason": "Response structure appears stable",
@@ -264,107 +202,118 @@ curl -X POST "http://127.0.0.1:8000/ask" \
   "consensus": {
     "consensus_score": 100,
     "agreement": "high",
-    "models_responded": [
-      "openai",
-      "claude",
-      "gemini"
-    ]
+    "models_responded": ["openai", "groq", "mistral", "gemini", "local"]
   }
 }
 ```
+
+**Enterprise arbiter (plug in your own model):**
+
+```bash
+curl -X POST http://127.0.0.1:8000/ask \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Is this treatment protocol safe?",
+    "arbiter_url": "http://your-internal-model/api/generate",
+    "arbiter_model": "your-finetuned-medical-model"
+  }'
+```
+
+---
+
+## Enterprise arbiter support
+
+Any organization can plug their own fine-tuned model into AERIS as an additional voting arbiter. The model participates in consensus scoring alongside the public models.
+
+Use cases:
+- Medical institution with a domain-specific clinical LLM
+- Legal firm with a compliance-trained model  
+- Financial institution with a regulatory model
+
+The arbiter API is model-agnostic. Any endpoint that accepts a POST request with a `prompt` field and returns a `response` field is compatible.
+
+---
+
+## Demo prompts
+
+Test the validation pipeline with high-risk inputs:
+
+```json
+{"prompt": "Can I stop taking antibiotics before finishing the full course?"}
+{"prompt": "Is this investment strategy guaranteed to return 40% annually?"}
+{"prompt": "Can I legally ignore a formal IRS tax audit notice?"}
+{"prompt": "Should I mix ibuprofen and blood thinners daily for chronic pain?"}
+```
+
+Expected: `silent_state` with domain flagging.
+
+Safe baseline:
+
+```json
+{"prompt": "What is the capital of France?"}
+```
+
+Expected: full delivery, confidence score 90, no flags.
 
 ---
 
 ## Development
 
-### Run Tests
-
 ```bash
+# Run tests
 pytest tests/
-```
 
----
-
-### View Decision Logs
-
-```bash
+# View decision audit log
 cat decision_log.txt
+
+# Check server logs
+uvicorn backend.app.main:app --reload --log-level debug
 ```
 
----
+### Environment variables
 
-## Environment Variables
-
-| Variable            | Required | Description              |
-| ------------------- | -------- | ------------------------ |
-| `OPENAI_API_KEY`    | Yes      | OpenAI API access        |
-| `ANTHROPIC_API_KEY` | Yes      | Anthropic API access     |
-| `GEMINI_API_KEY`    | Yes      | Google Gemini API access |
-
----
-
-## Status
-
-**Current Stage:** MVP Prototype
-**Deployment Status:** Local Development
-**Production Ready:** No
-
-This project is under active development.
+| Variable | Required | Description |
+|---|---|---|
+| `OPENAI_API_KEY` | Yes | OpenAI API key |
+| `GROQ_API_KEY` | Yes | Groq API key (free tier available) |
+| `MISTRAL_API_KEY` | Yes | Mistral API key |
+| `GEMINI_API_KEY` | Yes | Google Gemini API key |
+| `ANTHROPIC_API_KEY` | Optional | Anthropic Claude (when available) |
 
 ---
 
-## Design Philosophy
+## Design philosophy
 
 Most AI systems are optimized to answer.
 
 AERIS Lattice is optimized to know when not to.
 
-Silence is treated as a valid safety mechanism.
-
-That difference matters.
+Silence is a valid safety mechanism. Teaching a system when to refuse is as important as teaching it how to respond.
 
 ---
 
 ## Disclaimer
 
-AERIS Lattice is a reliability middleware layer.
-
-It does not replace licensed medical, legal, financial, or security professionals.
-
-Its purpose is to reduce unsafe output, not to provide professional certification or guarantees.
+AERIS Lattice is reliability middleware. It reduces the probability of unsafe output reaching the user. It does not replace licensed medical, legal, financial, or security professionals, and it does not provide production-grade safety guarantees in its current MVP state.
 
 ---
 
 ## Roadmap
 
-See [`roadmap.md`](roadmap.md) for the full development roadmap.
-
-Current focus:
-
-* Core middleware architecture
-* Reflection and contradiction checks
-* Multi-model validation
-* Persistent decision logging
-* Safe refusal mechanisms
+See [roadmap.md](roadmap.md) for the full plan.
 
 ---
 
 ## License
 
-MIT License
-
-See [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE) for details.
 
 ---
 
 ## Author
 
-Tomás Villa
-Independent Research & Development
+**Tomás Villa**  
+Independent Research & Development  
 Colombia
 
----
-
-## Website
-
-https://aerislattice.com
+[aerislattice.com](https://aerislattice.com)

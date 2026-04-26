@@ -1,255 +1,110 @@
-# AERIS Lattice Roadmap
+# Roadmap
 
-This roadmap defines the technical and strategic development path for AERIS Lattice.
+## Status
 
-The goal is not simply to improve LLM output.
-
-The goal is to create a reliability architecture where AI systems can detect uncertainty, recover from failure, and refuse unsafe responses before harm occurs.
-
----
-
-# Phase 1 — MVP Foundation (Current)
-
-## Objective
-
-Build the first working middleware prototype capable of validating LLM responses before delivery.
-
-## Scope
-
-### Core Backend
-
-* FastAPI project structure
-* `/ask` endpoint
-* Request/response validation models
-* Environment configuration
-* Local development setup
-
-### Validation Layer v1
-
-* Confidence Engine
-* Reflective Loop
-* Contradiction Lattice
-* Silent State
-* Basic decision logging
-
-### LLM Integration
-
-* OpenAI API integration
-* Anthropic API integration
-* Gemini API integration
-* Basic parallel model querying
-
-### Consensus Engine v1
-
-* Multi-model agreement scoring
-* Low-agreement detection
-* Consensus threshold validation
-* Silent-state escalation on disagreement
-
-## Success Criteria
-
-* Working local prototype
-* Swagger API testing available
-* Safe refusal for high-risk prompts
-* Multi-model validation functioning
-* Decision logs generated successfully
+Current stage: **MVP complete — local development**  
+Active arbiters: GPT-4o-mini · Groq Llama 3.3 · Mistral Small · Gemini 2.5 Flash · Local LLM  
+Architecture: 5-layer validation pipeline with 5-model consensus engine
 
 ---
 
-# Phase 2 — Reliability Infrastructure
+## Milestone 1 — MVP ✅ Complete
 
-## Objective
-
-Move from prototype validation to system reliability and operational visibility.
-
-## Scope
-
-### Persistence Layer
-
-* PostgreSQL integration
-* Structured audit logging
-* Query history tracking
-* Reliability score history
-* Failure pattern storage
-
-### Observability
-
-* Request monitoring
-* Failure analytics
-* Reflection frequency tracking
-* Silent-state trigger reports
-* Confidence trend analysis
-
-### Confidence Engine v2
-
-* Domain-aware scoring improvements
-* Risk classification by prompt type
-* Contextual severity weighting
-* Hallucination pattern detection
-
-### Contradiction Lattice v2
-
-* Context memory comparison
-* Rule-based contradiction expansion
-* Internal logic consistency validation
-
-## Success Criteria
-
-* Persistent logs available
-* Failure patterns measurable
-* Improved confidence scoring accuracy
-* Repeatable evaluation benchmarks
+- [x] FastAPI backend skeleton
+- [x] OpenAI live connection
+- [x] Confidence Engine with domain-aware scoring
+- [x] Reflective Loop
+- [x] Silent State structured refusal
+- [x] Contradiction Lattice
+- [x] Append-only decision audit logging
+- [x] Multi-model consensus engine (5 arbiters)
+- [x] Groq Llama 3.3 integration
+- [x] Mistral Small integration
+- [x] Gemini 2.5 Flash integration
+- [x] Local LLM arbiter via Ollama
+- [x] Enterprise custom arbiter API
+- [x] Visual demo UI
+- [x] Professional documentation
+- [x] Live domain (aerislattice.com)
 
 ---
 
-# Phase 3 — Enterprise Safety Layer
+## Milestone 2 — Reliability Infrastructure
 
-## Objective
+Target: Week 2
 
-Prepare AERIS Lattice for real deployment in high-risk environments.
-
-## Scope
-
-### Domain Safety Modules
-
-* Medical safety validation
-* Financial risk boundaries
-* Legal response caution layers
-* Compliance rule enforcement
-* Security-sensitive prompt handling
-
-### Consensus Engine v2
-
-* Weighted model trust ranking
-* Domain-specific model prioritization
-* Confidence blending strategies
-* Escalation routing policies
-
-### Access Control
-
-* User roles
-* Admin validation controls
-* Risk override permissions
-* Audit review dashboards
-
-### Compliance
-
-* Full audit trails
-* Response explainability
-* Regulatory logging support
-* Internal governance workflows
-
-## Success Criteria
-
-* Enterprise-safe architecture
-* Domain-specific reliability rules
-* Full traceability of decisions
-* Explainable refusal logic
+- [ ] PostgreSQL persistent decision logging (replace flat file)
+- [ ] Semantic similarity scoring in consensus engine (replace keyword matching)
+- [ ] Domain-specific safety profiles (medical, legal, financial, cybersecurity)
+- [ ] Response confidence calibration using historical log data
+- [ ] REST API authentication (API key middleware)
+- [ ] Rate limiting
+- [ ] Structured test suite with pytest
+- [ ] CI/CD pipeline via GitHub Actions
+- [ ] `.env.example` template committed to repo
+- [ ] Contribution guidelines (`CONTRIBUTING.md`)
 
 ---
 
-# Phase 4 — Platform Layer
+## Milestone 3 — Production Deployment
 
-## Objective
+Target: Week 3
 
-Transform AERIS Lattice from middleware into reliability infrastructure.
-
-## Scope
-
-### Deployment
-
-* Docker support
-* Cloud deployment architecture
-* CI/CD pipelines
-* Production monitoring
-* Horizontal scaling readiness
-
-### Integrations
-
-* OpenAI
-* Anthropic
-* Gemini
-* Open-source LLM support
-* Enterprise private model support
-
-### API Expansion
-
-* External developer SDK
-* Enterprise integration endpoints
-* Validation-as-a-Service model
-* Internal orchestration support
-
-## Success Criteria
-
-* Production deployment possible
-* Scalable architecture
-* External integration support
-* SaaS readiness
+- [ ] Cloud deployment (Railway or Render — initial)
+- [ ] Public API endpoint with key management
+- [ ] Docker containerization
+- [ ] Environment-based configuration (dev / staging / prod)
+- [ ] Health check and uptime monitoring
+- [ ] Request/response payload encryption
+- [ ] Basic admin dashboard for log review
+- [ ] Public demo at demo.aerislattice.com
 
 ---
 
-# Phase 5 — Research Layer
+## Milestone 4 — Enterprise Features
 
-## Objective
+Target: Month 2
 
-Advance epistemic recovery systems beyond standard validation middleware.
-
-## Scope
-
-### Advanced Reasoning Systems
-
-* Self-healing response recovery
-* Recursive reflection chains
-* Failure-state recovery architecture
-* Persistent epistemic state tracking
-
-### Ethical Anchor
-
-* Stable reasoning boundaries
-* Moral consistency validation
-* Teleological alignment checks
-* Human-priority decision frameworks
-
-### Research & Publication
-
-* Whitepaper publication
-* Reliability benchmark framework
-* Academic validation
-* AI safety architecture publication
-
-## Success Criteria
-
-* Publishable architecture framework
-* Defensible technical differentiation
-* Research credibility
-* Long-term strategic moat
+- [ ] Multi-tenant architecture (organizations with isolated arbiters)
+- [ ] Custom domain-specific safety layer configuration per tenant
+- [ ] Arbiter registry (plug-and-play model endpoints)
+- [ ] Audit trail export (CSV, JSON) for compliance workflows
+- [ ] Webhook support for silent-state events
+- [ ] SDK wrapper — Python package (`pip install aeris-lattice`)
+- [ ] OpenAPI spec publication
+- [ ] SOC 2 readiness assessment
 
 ---
 
-# Immediate Priorities
+## Milestone 5 — Research & Optimization
 
-Current execution focus:
+Target: Month 3+
 
-1. Stable `/ask` endpoint
-2. Real OpenAI + Claude + Gemini integration
-3. Consensus Engine v1
-4. Silent State reliability testing
-5. Contradiction Lattice improvements
-6. Decision logging cleanup
-7. Local demo environment
+- [ ] Semantic consensus scoring using embedding similarity (cosine distance between model outputs)
+- [ ] Confidence calibration benchmarking against domain expert ground truth
+- [ ] Adversarial prompt stress testing
+- [ ] Hallucination rate benchmarks across model combinations
+- [ ] Target reliability threshold: 99.9%
+- [ ] Academic paper draft: *Inference-Time Reliability Architectures for LLM Deployment in High-Stakes Domains*
+- [ ] Multi-model fine-tuning pipeline for domain-specific arbiter training
+- [ ] Partnership with medical/legal/financial institutions for domain dataset access
 
 ---
 
-# Long-Term Vision
+## Long-term vision
 
-Most AI systems are designed to answer.
+- Model-agnostic reliability layer deployable in front of any LLM
+- Industry-specific compliance certifications (HIPAA-adjacent for medical, SOX-adjacent for financial)
+- Real-time reliability scoring dashboard for enterprise AI operations teams
+- Open-source core with enterprise licensing for managed deployments
 
-AERIS Lattice is designed to know when not to.
+---
 
-The final objective is simple:
+## Not in scope (current phase)
 
-Create a standard reliability layer for all high-consequence AI systems.
+- Replacing underlying LLMs
+- Training new models
+- Real-time audio or multimodal validation
+- Browser extension or mobile SDK
 
-Not smarter AI.
-
-Safer decisions.
+These are evaluated for future milestones pending funding and research partnerships.
