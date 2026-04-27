@@ -1,186 +1,164 @@
 # Vision
 
-## Overview
+## What AERIS Lattice is
 
-AERIS Lattice is an inference-time reliability layer for large language models.
+AERIS Lattice is inference-time reliability middleware for large language models.
 
 It does not improve the underlying model. It governs its output before it reaches the user.
 
-The distinction matters. AERIS does not attempt to make LLMs smarter. It attempts to make LLM-powered systems safer by introducing a structured decision layer between model output and human action.
+The distinction matters. AERIS does not attempt to make LLMs smarter. It makes LLM-powered systems safer by introducing a structured, multi-layer validation architecture between model output and human action. Any model. Any domain. Any deployment.
 
 ---
 
-## Problem statement
+## The problem
 
 LLM deployment in high-stakes domains proceeds without any formal validation layer between model output and human action.
 
-The failure modes are well-documented:
+The failure modes are well-documented and occurring now:
 
 - Models assert incorrect medical dosages with high apparent confidence
 - Models provide legal guidance that contradicts applicable law in the user's jurisdiction
-- Models present financially dangerous strategies as factual and low-risk
+- Models present financially dangerous strategies as factual, low-risk, and guaranteed
 - Models hallucinate citations, statistics, clinical studies, and expert consensus
-- Models answer questions they should refuse, because refusal was not optimized during training
+- Models answer questions they should refuse — because refusal was not optimized during training
 
-Current mitigations operate at training time:
+Current mitigations all operate at training time or prompt-construction time:
 
-| Mitigation | When applied | Limitation |
+| Mitigation | When applied | Fundamental limitation |
 |---|---|---|
-| Prompt engineering | Inference | Inconsistent, prompt-dependent |
-| Fine-tuning | Training | Domain-specific, expensive |
-| RLHF | Training | Reduces rate, does not eliminate failure |
-| RAG | Inference | Addresses knowledge gaps, not confidence calibration |
+| Prompt engineering | Per request | Inconsistent, adversarially fragile |
+| Fine-tuning | Training | Domain-specific, expensive, cannot generalize |
+| RLHF | Training | Reduces rate — does not eliminate failure |
+| RAG | Per request | Addresses knowledge gaps — not confidence calibration |
+| Guardrail libraries | Per request | Rule-based, easily bypassed, no consensus signal |
 
 None of these provide a structured, model-agnostic validation layer at inference time.
 
-**The gap:** there is no production-grade middleware that intercepts LLM output and applies multi-source reliability validation before delivery.
+A system that produces unsafe output 1% of the time causes real harm at scale. At 10,000 daily queries, that is 100 dangerous responses per day. In a medical information platform, those are 100 patients per day who may act on incorrect clinical guidance.
 
-A system that hallucinates 1% of the time will cause real harm at scale. The acceptable threshold in high-stakes domains is not 99%. It approaches 99.999%.
+**The gap:** there is no production-grade middleware that intercepts LLM output, applies multi-source reliability validation, and makes a structured delivery decision before the response reaches the user.
 
 ---
 
-## Hypothesis
+## The hypothesis
 
-A multi-model consensus architecture — where independent models are queried simultaneously and their agreement is measured before any response is delivered — produces a measurable reduction in unsafe output reaching the user, without requiring changes to the underlying models.
+A multi-model dual-consensus architecture — where independent models are queried simultaneously, sovereign local agents evaluate the primary response, and their agreement is measured and weighted before any response is delivered — produces a measurable, reproducible reduction in unsafe output reaching the user, without requiring modification to the underlying models.
 
-Combined with domain-aware confidence scoring and structured silent states, this approach provides a deployable reliability layer that is model-agnostic and domain-configurable.
+Combined with domain-aware confidence scoring, adversarial challenge evaluation, and structured silent states, this approach provides a deployable reliability layer that is model-agnostic, domain-configurable, and auditable.
+
+**Validated:** AERIS v2.9 achieves 100% weighted reliability and 0% dangerous delivery rate across a 32-prompt adversarial benchmark spanning 4 risk tiers including adversarial jailbreaks, false authority injection, social engineering, and high-stakes medical, legal, and financial prompts.
 
 ---
 
 ## Architecture decisions
 
-### Why multi-model consensus
+### Why dual consensus — external and sovereign
 
-No single model is reliably correct across all domains and edge cases. Five independent models queried simultaneously provide a disagreement signal that is not available from any single model.
+No single model is reliably correct across all domains and edge cases. Four independent cloud models queried simultaneously provide a disagreement signal unavailable from any individual model.
 
-High inter-model disagreement correlates strongly with uncertain, contested, or domain-specific ground where errors are most likely. This signal is available at inference time with no training required and no model modification.
+The sovereign layer — five local agents running on Ollama with independent roles and weighted votes — provides a second, private validation pass that cloud consensus cannot. The Silent State Judge holds veto authority: a single veto immediately suppresses the response regardless of all other scores.
 
-The consensus engine is designed to be extended. Organizations can add domain-specific fine-tuned models as additional arbiters, increasing the precision of the consensus signal in their target domain.
+This dual structure separates concerns: cloud models provide breadth and diversity of perspective; local agents provide depth, privacy, and structured adversarial challenge.
 
-### Why a silent state
+### Why a silent state — not a fallback answer
 
-Partial responses and hedged answers create false confidence. A user who receives a qualified answer may still act on it. A structured refusal — explicit, logged, and consistent — leaves no ambiguity.
+Partial responses and hedged answers create false confidence. A user who receives a qualified answer may still act on it. A structured refusal — explicit, logged, consistent, and auditable — leaves no ambiguity.
 
 The silent state is not a failure mode. It is a deliberate design output. Teaching a system when to refuse is as important as teaching it how to respond. Current LLM deployment practice optimizes almost exclusively for the latter.
 
-### Why domain-aware confidence scoring
+The enterprise argument is economic as well as ethical: the liability cost of a dangerous delivery in a regulated domain far exceeds the operational cost of a false refusal.
 
-General linguistic uncertainty detection — hedging words, vague quantifiers — is insufficient for high-stakes domains. A response that sounds confident but touches medical, legal, or financial content requires a different reliability threshold than a response about geography or history.
+### Why tiered routing — not all models on every request
 
-Domain classification runs at inference time against a configurable keyword index and adjusts the confidence threshold accordingly. This allows domain-specific safety profiles to be configured per deployment without modifying the underlying pipeline.
+Querying 4 cloud models on every request is wasteful and unnecessary. "What is the capital of France?" does not require the same validation depth as "Can I stop taking my antidepressants cold turkey?"
 
-### Why append-only decision logging
+Tiered routing classifies each prompt and routes it to the minimum model set required for reliable validation at that risk level:
 
-Every validation decision — delivered or suppressed — is logged with the full prompt, response excerpt, confidence score, and status. This creates an audit trail for:
+- Tier A (safe): 2 models, fast path
+- Tier B (medium): 3 models
+- Tier C/D (high risk and adversarial): 4 cloud models + sovereign layer
 
-- Post-hoc reliability analysis
-- Threshold calibration using real-world data
+For typical production traffic where the majority of requests are safe, this reduces token cost by approximately 50% with zero reliability impact.
+
+### Why domain-aware confidence thresholds
+
+General linguistic uncertainty detection is insufficient for high-stakes content. A response that sounds confident but touches medical, legal, or financial content requires a fundamentally different reliability bar than a response about geography or history.
+
+Domain classification runs at inference time against a structured keyword and pattern index, and adjusts confidence thresholds, model routing, ethical anchor activation, and sovereign layer invocation accordingly. This allows domain-specific safety profiles to be configured per deployment without modifying the validation pipeline.
+
+### Why an append-only audit log
+
+Every validation decision — delivered and suppressed — is logged with the full prompt, response excerpt, confidence score, domain classification, and outcome. This creates a durable audit trail for:
+
+- Post-hoc reliability analysis and threshold calibration
 - Regulatory compliance documentation
 - Incident investigation
+- Real-world benchmark data collection
 
-Logging is append-only. Records are never modified or deleted. This is a deliberate design choice for auditability.
+Records are never modified or deleted. Append-only is not a convenience choice — it is a deliberate architectural decision for auditability.
 
 ### Why an enterprise arbiter API
 
-Different organizations have different reliability requirements and different domain knowledge. A medical institution may operate a fine-tuned clinical LLM trained on their patient population. A legal firm may have a compliance model trained on their jurisdiction's case law.
+Different organizations have different reliability requirements and different domain knowledge. A hospital system operating a clinical LLM fine-tuned on their patient population has knowledge AERIS's general arbiters do not. A legal firm with a compliance model trained on their jurisdiction's case law can encode that expertise as a voting arbiter.
 
-AERIS allows any model exposed via a standard API endpoint to participate as a voting arbiter in the consensus engine. The organization's domain expertise becomes part of the reliability signal, without requiring access to or modification of the AERIS core.
-
----
-
-## Validation pipeline
-
-```
-Prompt received
-    ↓
-Query all arbiters in parallel
-    — GPT-4o-mini (OpenAI)
-    — Llama 3.3 70B (Groq)
-    — Mistral Small (Mistral AI)
-    — Gemini 2.5 Flash (Google)
-    — Llama 3.2 (Local via Ollama)
-    — [Optional enterprise arbiter]
-    ↓
-Consensus Engine
-    — Count valid responses (no API errors)
-    — Detect uncertainty markers across responses
-    — Score = (valid / total) × 100
-    — Apply penalty if ≥ 2 models express uncertainty
-    — Threshold: 60. Below → silent state
-    ↓
-Contradiction Lattice
-    — Scan primary response for absolute certainty markers
-    — Flagged terms: always, never, guaranteed, certain, 100%, impossible
-    — Any match → silent state
-    ↓
-Confidence Engine
-    — Scan for uncertainty language in response
-    — Classify prompt domain: medical, legal, financial
-    — Domain match → confidence capped at 55
-    — Threshold: 70. Below → reflective loop
-    ↓
-Reflective Loop
-    — Apply reflective prefix to response
-    — Re-score with confidence engine
-    — Still below threshold → silent state
-    ↓
-Deliver or suppress
-    — Log decision with full metadata
-    — Return structured response or structured refusal
-```
+AERIS allows any model exposed via a standard API endpoint to participate as a weighted arbiter in the consensus engine. The organization's domain expertise becomes part of the reliability signal — without requiring access to or modification of the AERIS core.
 
 ---
 
-## Success criteria
+## The design philosophy
 
-The MVP demonstrates:
+Most AI systems are optimized to answer.
 
-1. High-risk prompts (medical, legal, financial) consistently trigger silent state or confidence penalty
-2. Safe factual prompts pass through with confidence ≥ 90
-3. All decisions are logged with full traceability
-4. The system is model-agnostic — any LLM endpoint can be substituted without modifying the validation pipeline
-5. Enterprise arbiters can be added dynamically per request
+AERIS Lattice is optimized to know when not to.
 
----
+This is the inversion. Silence is a valid safety mechanism. The cost of a false refusal — a user who must consult a professional instead of acting on an LLM response — is acceptable and often correct. The cost of a dangerous delivery — a user who acts on incorrect clinical or legal guidance — is not.
 
-## Target reliability threshold
-
-Current MVP: demonstrable improvement over single-model deployment  
-Near-term target: 99.9% safe output rate in high-risk domains  
-Long-term target: 99.999% — suitable for clinical and financial deployment
-
-Reaching 99.999% requires:
-- Semantic consensus scoring using embedding similarity (not keyword matching)
-- Confidence calibration against domain expert ground truth datasets
-- Adversarial prompt stress testing
-- Domain-specific arbiter fine-tuning partnerships
-
----
-
-## Non-goals
-
-- AERIS Lattice does not improve underlying model quality
-- AERIS Lattice does not provide its own answers — it validates model output only
-- AERIS Lattice does not guarantee zero unsafe output in its current state
-- AERIS Lattice is not a content moderation system
-- AERIS Lattice does not replace licensed professionals in any domain
+The acceptable threshold for dangerous delivery in high-stakes domains approaches zero. AERIS v2.9 achieves zero.
 
 ---
 
 ## Target deployment contexts
 
-| Domain | Risk | AERIS value |
+| Domain | Risk category | AERIS value |
 |---|---|---|
-| Medical information platforms | Patient safety | Silent state on clinical uncertainty |
+| Medical information platforms | Patient safety | Silent state on clinical uncertainty, drug interaction flags |
 | Financial advisory tools | Regulatory exposure | Contradiction detection on guarantee claims |
-| Legal research platforms | Liability | Domain confidence penalty on legal content |
-| Enterprise AI assistants | Operational risk | Audit trail, configurable thresholds |
+| Legal research platforms | Liability | Domain confidence penalty, professional escalation |
+| Enterprise AI assistants | Operational risk | Audit trail, configurable thresholds, sovereign validation |
 | Autonomous agent pipelines | Compounding errors | Multi-model consensus before action execution |
+| Government information services | Public trust | Silent state on policy and legal content |
+| Clinical decision support | Life-critical | Maximum threshold configuration, full sovereign validation |
+
+---
+
+## Reliability targets
+
+| Threshold | Current (v2.9) | Near-term | Long-term |
+|---|---|---|---|
+| Dangerous delivery rate | 0% | < 0.1% at scale | < 0.01% |
+| Weighted reliability score | 100% (32/32) | 99%+ at 100 prompts | 99.9%+ |
+| False refusal rate | 0% | < 5% | < 2% |
+
+Reaching 99.9%+ at scale requires semantic consensus scoring using embedding similarity, confidence calibration against domain expert ground truth, and domain-specific arbiter fine-tuning partnerships with institutional collaborators.
+
+---
+
+## Non-goals
+
+AERIS Lattice explicitly does not:
+
+- Improve the quality or accuracy of underlying LLMs
+- Provide its own answers — it validates model output only
+- Replace licensed medical, legal, or financial professionals
+- Guarantee zero unsafe output in its current state
+- Serve as a content moderation system for non-factual content
+
+These are not limitations to be fixed. They define the scope of the problem AERIS is designed to solve.
 
 ---
 
 ## Status
 
-MVP complete. 5-model consensus engine operational. Core validation pipeline confirmed working across medical, legal, and financial domain tests.
+v2.9 complete. 32/32 benchmark score. 0% dangerous delivery. 100% weighted reliability. Dual consensus architecture operational with 4 cloud models and 5 sovereign agents.
 
 See [roadmap.md](../roadmap.md) for next milestones.

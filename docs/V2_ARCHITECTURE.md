@@ -1,254 +1,315 @@
-# AERIS Lattice v2 — Architecture & Execution Roadmap
+# AERIS Lattice v2 — Dual Consensus Architecture
 
-## Brutal honest assessment of v1
+## Overview
 
-v1 works. The pipeline is sound. The concept is validated. Here is what is weak:
+AERIS v2 implements a three-layer dual consensus validation system. Every prompt passes through 8 sequential validation steps before a delivery decision is made. The system is designed with a safe refusal bias: when uncertain, it suppresses rather than delivers.
 
-- Keyword-based consensus is fragile. Two models saying "I think maybe" 
-  and "this is uncertain" will score differently on keyword matching 
-  even though they mean the same thing.
-- All 5 models are queried on every request including "what is 2+2". 
-  That is 5x the token cost and 5x the latency for zero reliability gain.
-- The confidence engine scores the response but ignores the prompt entirely 
-  for threshold calibration. A medical prompt needs a higher bar than 
-  a geography question.
-- Silent state has no explanation. Enterprise clients need to know WHY 
-  a response was suppressed, not just that it was.
-- No benchmark. You cannot improve reliability if you cannot measure it.
-
-v2 fixes all of these.
+**Benchmark result (v2.9):** 32/32 · 100% weighted reliability · 0% dangerous delivery · 0% false refusal
 
 ---
 
-## v2 Architecture: Dual Consensus System
+## Full pipeline
 
 ```
 User Prompt
     ↓
-┌─────────────────────────────────────────────────────────────┐
-│  Step 1: Prompt Classifier                                  │
-│  → Risk tier (A/B/C/D)                                      │
-│  → Domain (medical/legal/financial/general)                  │
-│  → Models required (2, 3, or 5)                             │
-│  → Thresholds (domain-specific)                             │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│  Step 1 — Prompt Classifier                                          │
+│                                                                      │
+│  Input:  raw prompt string                                           │
+│  Output: risk tier · domain · models required · thresholds          │
+│                                                                      │
+│  Tier A — Safe:        TIER_A_SAFE_PATTERNS match (fast path)        │
+│  Tier B — Medium:      TIER_B_DOMAINS match                          │
+│  Tier C — High Risk:   TIER_C_DOMAINS match (medical/legal/financial)│
+│  Tier D — Adversarial: TIER_D_SIGNALS match (jailbreaks/injection)   │
+│                                                                      │
+│  File: backend/app/core/prompt_classifier.py                         │
+└──────────────────────────────────────────────────────────────────────┘
     ↓
-┌─────────────────────────────────────────────────────────────┐
-│  Layer 1: External Consensus (tiered model selection)       │
-│  Tier A: OpenAI + Groq only (fast, cheap)                   │
-│  Tier B: OpenAI + Groq + Gemini                             │
-│  Tier C/D: All 5 models                                     │
-│  → Semantic similarity scoring (not keyword matching)       │
-│  → Consensus score (0-100)                                  │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│  Step 2 — Model Selection (tiered routing)                           │
+│                                                                      │
+│  Tier A: ["openai", "groq"]                   — 2 models            │
+│  Tier B: ["openai", "groq", "gemini"]         — 3 models            │
+│  Tier C/D: ["openai", "groq", "mistral", "gemini"] — 4 models       │
+│  mode="full": all 4 models regardless of tier                        │
+│                                                                      │
+│  File: backend/app/services/llm_service.py                           │
+└──────────────────────────────────────────────────────────────────────┘
     ↓
-┌─────────────────────────────────────────────────────────────┐
-│  Ethical Anchor (Tier C/D only)                             │
-│  → Harm Prevention Layer                                    │
-│  → Human Authority Layer                                    │
-│  → Irreversibility Layer                                    │
-│  → Manipulation Boundary                                    │
-│  → Hard refusal (veto) or weighted penalty                  │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│  Step 3 — External Consensus (Layer 1)                               │
+│                                                                      │
+│  Models queried in parallel. Responses extracted as text.            │
+│  Consensus score computed from agreement signal.                     │
+│                                                                      │
+│  If consensus_score < 40 → SILENT STATE                              │
+│  If primary_response is None → SILENT STATE                          │
+│                                                                      │
+│  Output: consensus_score · agreement · primary_response              │
+│          models_responded · models_failed                            │
+│                                                                      │
+│  File: backend/app/core/consensus_engine.py                          │
+└──────────────────────────────────────────────────────────────────────┘
     ↓
-┌─────────────────────────────────────────────────────────────┐
-│  Contradiction Lattice                                      │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│  Step 4 — Contradiction Lattice                                      │
+│                                                                      │
+│  Pattern-based detection across 3 severity levels:                  │
+│                                                                      │
+│  CRITICAL  → immediate silent state (score_penalty: 100)             │
+│    Examples: "guaranteed safe", "100% certain", "no risk of"         │
+│    Domain overconfidence: "safe to stop taking", "don't need doctor" │
+│                                                                      │
+│  HIGH      → strong penalty (score_penalty: 40)                      │
+│    Examples: "always works", "experts agree that", "proven fact"     │
+│                                                                      │
+│  MEDIUM    → penalty applied (score_penalty: 20)                     │
+│    Examples: "should always", "perfectly safe", "totally certain"    │
+│                                                                      │
+│  File: backend/app/core/contradiction_lattice.py                     │
+└──────────────────────────────────────────────────────────────────────┘
     ↓
-┌─────────────────────────────────────────────────────────────┐
-│  Layer 2: Sovereign Consensus (Tier C/D only)               │
-│  Local agents running on Ollama — independent votes         │
-│  Skeptic Agent         weight: 1.0                          │
-│  Compliance Guardian   weight: 1.5                          │
-│  Adversarial Challenger weight: 1.2                         │
-│  Precision Auditor     weight: 1.0                          │
-│  Silent State Judge    weight: 2.0 — VETO AUTHORITY         │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│  Step 5 — Ethical Anchor (Tier C/D only)                             │
+│                                                                      │
+│  Four pillars evaluated against prompt + response:                   │
+│                                                                      │
+│  Pillar 1 — Harm Prevention                                          │
+│    Physical harm, self-harm, endangerment of others                  │
+│                                                                      │
+│  Pillar 2 — Human Authority                                          │
+│    Medical, legal, financial advice requiring licensed professional  │
+│                                                                      │
+│  Pillar 3 — Irreversibility                                          │
+│    Decisions with permanent, difficult-to-reverse consequences       │
+│                                                                      │
+│  Pillar 4 — Manipulation Boundary                                    │
+│    Social engineering, fraud facilitation, coercive framing          │
+│                                                                      │
+│  RefusalType.HARD → immediate silent state (pillar triggered logged) │
+│  RefusalType.WEIGHTED → penalty_points subtracted from confidence    │
+│  RefusalType.CLEAR → no action                                       │
+│                                                                      │
+│  File: backend/app/core/ethical_anchor.py                            │
+└──────────────────────────────────────────────────────────────────────┘
     ↓
-┌─────────────────────────────────────────────────────────────┐
-│  Confidence Engine + Reflective Loop                        │
-│  Domain-aware thresholds                                    │
-│  Ethical penalty applied to score                           │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│  Step 6 — Sovereign Layer (Tier C/D only) — Layer 2                  │
+│                                                                      │
+│  Five local agents run sequentially on Ollama (Llama 3.2:latest).    │
+│  Each agent receives the prompt + primary response.                  │
+│  Each agent returns: verdict · confidence · reasoning                │
+│                                                                      │
+│  Agent               Verdict options    Weight                        │
+│  ─────────────────── ────────────────── ──────                       │
+│  Skeptic             deliver/reflect/silent   1.0                    │
+│  Compliance Guardian deliver/reflect/silent   1.5                    │
+│  Adversarial Challenger deliver/reflect/silent 1.2                   │
+│  Precision Auditor   deliver/reflect/silent   1.0                    │
+│  Silent State Judge  deliver/reflect/silent   2.0 ← VETO             │
+│                                                                      │
+│  JUDGE VETO RULE: If Judge.verdict == silent → immediate SILENT STATE │
+│  regardless of all other agent scores.                               │
+│                                                                      │
+│  Weighted consensus:                                                 │
+│  score = Σ(agent.weight × agent.confidence/100) / Σ(agent.weight)   │
+│                                                                      │
+│  If verdict_weights["silent"] ≥ 40% → SILENT STATE                  │
+│  If verdict_weights["reflect"] ≥ 35% → REFLECT (triggers loop)      │
+│  Otherwise → DELIVER (passes to confidence engine)                   │
+│                                                                      │
+│  File: backend/app/core/sovereign_layer.py                           │
+└──────────────────────────────────────────────────────────────────────┘
     ↓
-┌─────────────────────────────────────────────────────────────┐
-│  Layer 3: Meta-Arbitration Engine                           │
-│  Combines all signals into one trust score (0-100)          │
-│  Weights: External 35% + Sovereign 35% +                   │
-│           Confidence 20% + Contradiction 10%                │
-│  Domain threshold check                                     │
-│  Explainable refusal chain                                  │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│  Step 7 — Confidence Engine                                          │
+│                                                                      │
+│  Domain-aware scoring. Trusts prompt_classifier domain — does NOT    │
+│  re-detect domain from response text.                                │
+│                                                                      │
+│  Domain confidence caps (deliver threshold in parentheses):          │
+│  medical:           cap 52   (threshold 78)                          │
+│  legal:             cap 54   (threshold 78)                          │
+│  financial:         cap 56   (threshold 78)                          │
+│  safety:            cap 48   (threshold 78)                          │
+│  cybersecurity:     cap 55   (threshold 78)                          │
+│  adversarial:       cap 20   (threshold 92)                          │
+│  general_health:    cap 92   (threshold 58)                          │
+│  general_legal:     cap 92   (threshold 58)                          │
+│  general_financial: cap 92   (threshold 58)                          │
+│  general:           cap 92   (threshold 58)                          │
+│                                                                      │
+│  Score modifiers:                                                    │
+│  Appropriate deference (≥2 phrases) → score capped at min(72, cap)  │
+│  Strong uncertainty (any phrase)    → score capped at min(42, cap)  │
+│  Mild uncertainty (≥2 phrases, high-risk domains only) → min(58, cap)│
+│                                                                      │
+│  Ethical penalty applied: score = max(0, score - penalty_points)     │
+│  Contradiction penalty applied: score = max(0, score - penalty)      │
+│                                                                      │
+│  File: backend/app/core/confidence_engine.py                         │
+└──────────────────────────────────────────────────────────────────────┘
     ↓
-  Silent State (suppressed + explained) or Delivery (trusted)
+┌──────────────────────────────────────────────────────────────────────┐
+│  Step 8 — Reflective Loop                                            │
+│                                                                      │
+│  Triggered when confidence_score < conf_threshold.                   │
+│                                                                      │
+│  Domain-specific adversarial challenge prompts:                      │
+│  medical:     Forces model to assume patient in crisis reads this    │
+│  legal:       Challenges jurisdiction specificity and liability      │
+│  financial:   Challenges risk claims and guarantee language          │
+│  adversarial: Security audit — can this enable harm out of context?  │
+│  general:     BASE_REFLECTION — standard challenge template          │
+│                                                                      │
+│  Auditor: GPT-4o-mini (temperature=0.1, max_tokens=600, timeout=25)  │
+│                                                                      │
+│  If auditor returns "REFUSE:" prefix → SILENT STATE immediately      │
+│  Otherwise → revised response re-scored by confidence engine         │
+│  If revised score still < threshold → SILENT STATE                   │
+│                                                                      │
+│  File: backend/app/core/reflective_loop.py                           │
+└──────────────────────────────────────────────────────────────────────┘
+    ↓
+┌──────────────────────────────────────────────────────────────────────┐
+│  Step 9 — Meta-Arbitration Engine (Layer 3)                          │
+│                                                                      │
+│  Combines all signals into a single composite trust score (0–100).   │
+│                                                                      │
+│  Component weights:                                                  │
+│  External consensus:  35%                                            │
+│  Sovereign consensus: 35%                                            │
+│  Confidence score:    20%                                            │
+│  Contradiction check: 10%                                            │
+│                                                                      │
+│  Domain-specific delivery thresholds:                                │
+│  general / tier_a_safe:  deliver ≥ 52                               │
+│  general_health/legal/financial: deliver ≥ 58                       │
+│  medical:                deliver ≥ 80                               │
+│  legal:                  deliver ≥ 78                               │
+│  financial:              deliver ≥ 75                               │
+│  safety:                 deliver ≥ 85                               │
+│  adversarial:            deliver ≥ 95                               │
+│                                                                      │
+│  FinalVerdict.DELIVER → response delivered with full metadata        │
+│  FinalVerdict.SILENT  → silent state with explainable refusal chain  │
+│                                                                      │
+│  File: backend/app/core/meta_arbitration.py                          │
+└──────────────────────────────────────────────────────────────────────┘
+    ↓
+┌──────────────────────────────────────────────────────────────────────┐
+│  Step 10 — Decision Logger                                           │
+│                                                                      │
+│  Every decision logged to decision_log.txt (append-only).           │
+│  Fields: timestamp · prompt · response excerpt · confidence ·        │
+│          status · tier · domain · refusal reason                     │
+│                                                                      │
+│  File: backend/app/core/logger.py                                    │
+└──────────────────────────────────────────────────────────────────────┘
+    ↓
+  SILENT STATE → structured refusal + refusal chain + audit entry
+  or
+  DELIVERY → final_response + trust_score + full metadata + usage stats
 ```
 
 ---
 
-## Priority ranking — what to do first
+## API response structure
 
-Ranked by impact per hour of work:
+### Silent state response
 
-### 1. Tiered routing (highest ROI — do this first)
-- 60% latency reduction on safe prompts
-- 60% token cost reduction on Tier A
-- Zero reliability impact
-- Files: `prompt_classifier.py`, updated `llm_service.py`, updated `main.py`
-
-### 2. Benchmark suite (second — you cannot improve what you cannot measure)
-- Run v1 benchmark, record score
-- Then implement v2, run again
-- Regression detection between versions
-- Files: `benchmark_suite.json`, `run_benchmark.py`
-
-### 3. Ethical Anchor (third — biggest safety improvement)
-- Outcome-based harm detection replaces syntax-based detection
-- Hard veto for manipulation, child safety, self-harm
-- Weighted penalty for professional escalation domains
-- File: `ethical_anchor.py`
-
-### 4. Semantic consensus (fourth — biggest reliability improvement)
-- Cosine similarity between model outputs
-- Catches models that agree on the wrong answer
-- Catches models that disagree even when both are correct
-- File: updated `consensus_engine.py`
-
-### 5. Sovereign layer (fifth — enterprise differentiator)
-- Local agents add a private, offline validation layer
-- Judge veto is the killer feature for enterprise sales
-- Requires Ollama with llama3.2 installed
-- File: `sovereign_layer.py`
-
-### 6. Meta-arbitration engine (sixth — ties everything together)
-- Explainable trust score for enterprise dashboard
-- Domain-specific thresholds
-- Full audit record per decision
-- File: `meta_arbitration.py`
-
-### 7. Enterprise UI improvements (seventh)
-- Show trust score prominently
-- Show refusal chain explanation
-- Show which tier the prompt was classified into
-- Show sovereign agent votes on Tier C/D
-
-### 8. Trademark + patent (eighth — parallel track, not blocking)
-- File SIC Colombia trademark within 30 days
-- File USPTO provisional within 60 days
-- Neither of these blocks development
-
----
-
-## File placement guide
-
-Copy each v2 file to the correct location:
-
+```json
+{
+  "status": "silent_state",
+  "message": "Insufficient reliability for a safe response. Please consult a qualified professional.",
+  "tier": "tier_c_high",
+  "domain": "medical",
+  "trust_score": 0,
+  "refusal_reason": "low_confidence_after_reflection",
+  "refusal_chain": ["domain_confidence_penalty", "reflective_loop_triggered", "low_confidence_after_reflection"],
+  "consensus": { "consensus_score": 70, "agreement": "partial" },
+  "all_model_responses": { "openai": "...", "groq": "...", "mistral": "...", "gemini": "..." },
+  "model_stats": {
+    "openai":  { "tokens_in": 45, "tokens_out": 95, "latency_ms": 1783 },
+    "groq":    { "tokens_in": 67, "tokens_out": 257, "latency_ms": 1710 }
+  },
+  "usage": { "total_tokens": 1225, "total_tokens_in": 193, "total_tokens_out": 1032, "avg_latency_ms": 4068 },
+  "mode": "optimized"
+}
 ```
-prompt_classifier.py  →  backend/app/core/prompt_classifier.py
-ethical_anchor.py     →  backend/app/core/ethical_anchor.py (replaces v1)
-sovereign_layer.py    →  backend/app/core/sovereign_layer.py
-meta_arbitration.py   →  backend/app/core/meta_arbitration.py
-main.py               →  backend/app/main.py (replaces v1)
-llm_service.py        →  backend/app/services/llm_service.py (replaces v1)
-benchmark_suite.json  →  tests/benchmark_suite.json
-run_benchmark.py      →  tests/run_benchmark.py
+
+### Delivered response
+
+```json
+{
+  "final_response": "The capital of France is Paris.",
+  "trust_score": 98,
+  "delivery_confidence": "high",
+  "tier": "tier_a_safe",
+  "domain": "general",
+  "mode": "optimized",
+  "confidence": { "score": 92, "reason": "General domain — standard confidence", "domain": "general" },
+  "contradiction_check": { "contradiction": false, "severity": "none", "score_penalty": 0 },
+  "consensus": { "consensus_score": 100, "agreement": "high", "models_responded": ["openai", "groq"] },
+  "sovereign_layer": null,
+  "all_model_responses": { "openai": "The capital of France is Paris.", "groq": "The capital of France is Paris." },
+  "model_stats": {
+    "openai": { "tokens_in": 38, "tokens_out": 7, "latency_ms": 1004 },
+    "groq":   { "tokens_in": 69, "tokens_out": 23, "latency_ms": 361 }
+  },
+  "usage": { "total_tokens": 117, "total_tokens_in": 102, "total_tokens_out": 15, "avg_latency_ms": 682 }
+}
 ```
 
 ---
 
-## Confidence threshold by domain
+## Benchmark results by tier (v2.9)
 
-| Domain | Deliver threshold | Reflect threshold | Rationale |
-|---|---|---|---|
-| general | 65 | 50 | Low stakes — reasonable confidence sufficient |
-| medical | 80 | 60 | High stakes — wrong advice causes patient harm |
-| legal | 78 | 58 | High stakes — jurisdiction-specific, liability risk |
-| financial | 75 | 55 | High stakes — irreversible financial harm possible |
-| safety | 85 | 65 | Highest stakes — physical harm immediate |
-| adversarial | 95 | 90 | Near-impossible — adversarial prompts should not pass |
-| tier_a_safe | 55 | 40 | Fast path — geography, history, definitions |
+| Tier | Prompts | Pass | Dangerous Delivery | Refusal Rate |
+|---|---|---|---|---|
+| A — Safe | 7 | 7/7 | 0 | N/A |
+| B — Medium | 5 | 5/5 | 0 | N/A |
+| C — High Risk | 10 | 10/10 | 0 | 100% |
+| D — Adversarial | 10 | 10/10 | 0 | 100% |
+| **Total** | **32** | **32/32** | **0** | **100%** |
+
+Weighted reliability score: **100%** (tier weights: A×1, B×1.5, C×3, D×5)
 
 ---
 
-## Token efficiency gains by tier
+## Safe refusal bias
 
-| Tier | Models queried | Estimated cost vs v1 |
+The philosophy underpinning all threshold decisions:
+
+> Accept up to 15% false refusal rate in exchange for near-zero dangerous delivery.
+
+In high-stakes domains, the cost of suppressing a safe response is lower than the cost of delivering an unsafe one. AERIS v2.9 achieves 0% false refusal without compromising on this principle — but the thresholds are calibrated to accept false refusals if needed to maintain zero dangerous delivery.
+
+Silence is always cheaper than harm.
+
+---
+
+## Token efficiency by tier
+
+| Tier | Models queried | Cost vs 4-model baseline |
 |---|---|---|
-| Tier A (safe) | 2 of 5 | -60% |
-| Tier B (medium) | 3 of 5 | -40% |
-| Tier C (high) | 5 of 5 | 0% change |
-| Tier D (adversarial) | 5 of 5 + sovereign | +sovereign cost (local, free) |
+| Tier A — Safe | 2 cloud | −50% |
+| Tier B — Medium | 3 cloud | −25% |
+| Tier C/D + sovereign | 4 cloud + local | 0% (local is free) |
 
-For a system where 70% of traffic is Tier A and B, overall token cost drops ~50%.
-
----
-
-## Reliability metrics that matter for enterprise
-
-Ranked by importance:
-
-1. **Dangerous Delivery Rate** — high-risk prompt incorrectly delivered
-   Target: < 1%. Non-negotiable.
-
-2. **Safe Refusal Rate** — high-risk prompt correctly suppressed
-   Target: > 95%
-
-3. **False Refusal Rate** — safe prompt incorrectly suppressed
-   Target: < 10% (too high = unusable system)
-
-4. **Weighted Reliability Score** — tier-weighted pass rate
-   Target: > 90%
-
-5. **Correct Answer Rate** — safe prompts delivered usefully
-   Target: > 90%
-
-Raw accuracy (is the answer correct?) is secondary to safety (is the refusal rate correct?).
-An AERIS system that refuses 40% of safe prompts is broken.
-An AERIS system that delivers 2% of dangerous prompts is dangerous.
+For mixed production traffic (estimated 70% Tier A/B), overall token cost is approximately 40% lower than querying all 4 cloud models on every request.
 
 ---
 
-## What enterprise clients need to see
+## Benchmark progression
 
-### Public dashboard (client-facing)
-- Trust score for each response (0-100)
-- Delivery confidence (high/medium/low)
-- Domain classification
-- Refusal explanation in plain language
-
-### Admin dashboard (internal)
-- Full refusal chain
-- Which layer triggered suppression
-- Agent votes (sovereign layer)
-- Ethical anchor pillar triggered
-- Semantic similarity score
-- Token usage by tier
-- Dangerous delivery rate over time
-
-### Audit log (compliance)
-- Append-only
-- Every decision — delivered and suppressed
-- Full prompt, response excerpt, all scores
-- Exportable as JSON or CSV
-- Tamper-evident (hash each record in v3)
-
----
-
-## v2 commit sequence
-
-```bash
-# After placing all files:
-git add .
-git commit -m "feat(v2): dual consensus architecture — tiered routing, ethical anchor, sovereign layer, meta-arbitration"
-git push origin main
-
-# After running benchmark:
-git add tests/benchmark_results/
-git commit -m "benchmark: v2 baseline reliability scores"
-git push origin main
-```
-
-Tag the v2 release:
-```bash
-git tag -a v2.0.0 -m "AERIS Lattice v2 — Dual Consensus System"
-git push origin v2.0.0
-```
+| Version | Score | Dangerous Delivery | Weighted Score | Key change |
+|---|---|---|---|---|
+| v1.0 | 27/32 | 10% | 84.7% | Baseline |
+| v2.2 | 27/32 | 0% | 92.6% | Classifier + jailbreak expansion |
+| v2.3 | 29/32 | 0% | 95.2% | Domain thresholds, pipeline reorder |
+| v2.6 | 31/32 | 0% | 98.4% | Classifier keyword collision fix |
+| v2.7 | 31/32 | 0% | 96.8% | Timeout fix (1 transient api_error) |
+| **v2.9** | **32/32** | **0%** | **100%** | **Confidence engine domain trust fix** |
