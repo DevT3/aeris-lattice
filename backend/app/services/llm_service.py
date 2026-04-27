@@ -1,11 +1,11 @@
 """
 AERIS Lattice v2 — LLM Service
-Supports tiered model selection — not all 5 models are queried on every request.
-Tier A uses 2 fast models. Tier B uses 3. Tier C/D uses all 5.
-This reduces token cost and latency on low-risk prompts by up to 60%.
+Supports tiered model selection and full model override.
+Returns token usage and latency per model for UI display.
 """
 
 import os
+import time
 import requests as http_requests
 import google.generativeai as genai
 from openai import OpenAI
@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+groq_client   = Groq(api_key=os.getenv("GROQ_API_KEY"))
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 SYSTEM_PROMPT = (
@@ -25,98 +25,162 @@ SYSTEM_PROMPT = (
     "If uncertain, say so clearly."
 )
 
+# ── Model response structure ───────────────────────────────────────────────────
+# Every model function returns a dict with:
+#   text        — the response string (or error string)
+#   tokens_in   — input tokens used (None if unavailable)
+#   tokens_out  — output tokens used (None if unavailable)
+#   latency_ms  — response time in milliseconds
+#   error       — True if this is an error response
 
-def ask_openai(prompt: str) -> str:
+ERR_PREFIXES = (
+    "OpenAI error", "Groq error", "Mistral error",
+    "Gemini error", "Local model error", "Custom arbiter error"
+)
+
+
+def _model_result(text: str, tokens_in, tokens_out, latency_ms: float) -> dict:
+    return {
+        "text":       text,
+        "tokens_in":  tokens_in,
+        "tokens_out": tokens_out,
+        "latency_ms": round(latency_ms),
+        "error":      any(text.startswith(p) for p in ERR_PREFIXES)
+    }
+
+
+# ── Model functions ────────────────────────────────────────────────────────────
+
+def ask_openai(prompt: str) -> dict:
+    t0 = time.time()
     try:
-        response = openai_client.chat.completions.create(
+        res = openai_client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": prompt}
+                {"role": "user",   "content": prompt}
             ],
             temperature=0.2,
             max_tokens=800
         )
-        return response.choices[0].message.content
+        return _model_result(
+            res.choices[0].message.content,
+            res.usage.prompt_tokens,
+            res.usage.completion_tokens,
+            (time.time() - t0) * 1000
+        )
     except Exception as e:
-        return f"OpenAI error: {str(e)}"
+        return _model_result(f"OpenAI error: {str(e)}", None, None, (time.time() - t0) * 1000)
 
 
-def ask_groq(prompt: str) -> str:
+def ask_groq(prompt: str) -> dict:
+    t0 = time.time()
     try:
-        response = groq_client.chat.completions.create(
+        res = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": prompt}
+                {"role": "user",   "content": prompt}
             ],
             temperature=0.2,
             max_tokens=800
         )
-        return response.choices[0].message.content
+        return _model_result(
+            res.choices[0].message.content,
+            res.usage.prompt_tokens,
+            res.usage.completion_tokens,
+            (time.time() - t0) * 1000
+        )
     except Exception as e:
-        return f"Groq error: {str(e)}"
+        return _model_result(f"Groq error: {str(e)}", None, None, (time.time() - t0) * 1000)
 
 
-def ask_mistral(prompt: str) -> str:
+def ask_mistral(prompt: str) -> dict:
+    t0 = time.time()
     try:
         with Mistral(api_key=os.getenv("MISTRAL_API_KEY", "")) as client:
-            response = client.chat.complete(
+            res = client.chat.complete(
                 model="mistral-small-latest",
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt}
+                    {"role": "user",   "content": prompt}
                 ],
                 temperature=0.2,
                 max_tokens=800
             )
-            return response.choices[0].message.content
+            return _model_result(
+                res.choices[0].message.content,
+                res.usage.prompt_tokens if res.usage else None,
+                res.usage.completion_tokens if res.usage else None,
+                (time.time() - t0) * 1000
+            )
     except Exception as e:
-        return f"Mistral error: {str(e)}"
+        return _model_result(f"Mistral error: {str(e)}", None, None, (time.time() - t0) * 1000)
 
 
-def ask_gemini(prompt: str) -> str:
+def ask_gemini(prompt: str) -> dict:
+    t0 = time.time()
     try:
         model = genai.GenerativeModel("gemini-2.5-flash")
-        response = model.generate_content(f"{SYSTEM_PROMPT}\n\n{prompt}")
-        return response.text
+        res   = model.generate_content(f"{SYSTEM_PROMPT}\n\n{prompt}")
+        tokens_in  = None
+        tokens_out = None
+        try:
+            tokens_in  = res.usage_metadata.prompt_token_count
+            tokens_out = res.usage_metadata.candidates_token_count
+        except Exception:
+            pass
+        return _model_result(res.text, tokens_in, tokens_out, (time.time() - t0) * 1000)
     except Exception as e:
-        return f"Gemini error: {str(e)}"
+        return _model_result(f"Gemini error: {str(e)}", None, None, (time.time() - t0) * 1000)
 
 
-def ask_local(prompt: str, model: str = "llama3.2") -> str:
+def ask_local(prompt: str, model: str = "llama3.2") -> dict:
+    t0 = time.time()
     try:
-        response = http_requests.post(
+        res = http_requests.post(
             "http://localhost:11434/api/generate",
             json={
-                "model": model,
+                "model":  model,
                 "prompt": f"{SYSTEM_PROMPT}\n\n{prompt}",
                 "stream": False
             },
             timeout=60
         )
-        return response.json()["response"]
+        data = res.json()
+        return _model_result(
+            data["response"],
+            data.get("prompt_eval_count"),
+            data.get("eval_count"),
+            (time.time() - t0) * 1000
+        )
     except Exception as e:
-        return f"Local model error: {str(e)}"
+        return _model_result(f"Local model error: {str(e)}", None, None, (time.time() - t0) * 1000)
 
 
-def ask_custom_arbiter(prompt: str, arbiter_url: str, model: str = "custom") -> str:
+def ask_custom_arbiter(prompt: str, arbiter_url: str, model: str = "custom") -> dict:
+    t0 = time.time()
     try:
-        response = http_requests.post(
+        res = http_requests.post(
             arbiter_url,
             json={
-                "model": model,
+                "model":  model,
                 "prompt": f"{SYSTEM_PROMPT}\n\n{prompt}",
                 "stream": False
             },
             timeout=60
         )
-        return response.json().get("response", "No response from arbiter")
+        return _model_result(
+            res.json().get("response", "No response from arbiter"),
+            None, None,
+            (time.time() - t0) * 1000
+        )
     except Exception as e:
-        return f"Custom arbiter error: {str(e)}"
+        return _model_result(f"Custom arbiter error: {str(e)}", None, None, (time.time() - t0) * 1000)
 
 
-# Model registry — maps name to function
+# ── Model registry ─────────────────────────────────────────────────────────────
+
 MODEL_REGISTRY = {
     "openai":  ask_openai,
     "groq":    ask_groq,
@@ -125,21 +189,66 @@ MODEL_REGISTRY = {
     "local":   ask_local,
 }
 
+ALL_MODELS  = list(MODEL_REGISTRY.keys())
+FAST_MODELS = ["openai", "groq"]
+FULL_MODELS = ALL_MODELS
 
-def ask_models_selective(prompt: str, models: list[str]) -> dict:
+
+def ask_models_selective(prompt: str, models: list) -> dict:
     """
-    Query only the specified models — enables tiered routing.
-    Tier A: ["openai", "groq"]
-    Tier B: ["openai", "groq", "gemini"]
-    Tier C/D: all five
+    Query only specified models. Returns dict of model_name → result dict.
+    Each result has: text, tokens_in, tokens_out, latency_ms, error
     """
     results = {}
-    for model_name in models:
-        if model_name in MODEL_REGISTRY:
-            results[model_name] = MODEL_REGISTRY[model_name](prompt)
+    for name in models:
+        if name in MODEL_REGISTRY:
+            results[name] = MODEL_REGISTRY[name](prompt)
     return results
 
 
 def ask_all_models(prompt: str) -> dict:
-    """Query all 5 models — used for backward compatibility."""
-    return ask_models_selective(prompt, list(MODEL_REGISTRY.keys()))
+    """Query all 5 models."""
+    return ask_models_selective(prompt, ALL_MODELS)
+
+
+# ── Usage summary helpers ──────────────────────────────────────────────────────
+
+def compute_usage_summary(model_results: dict) -> dict:
+    """
+    Compute aggregate token usage and latency from model results dict.
+    Returns summary dict for API response.
+    """
+    total_in   = 0
+    total_out  = 0
+    latencies  = []
+    has_tokens = False
+
+    for result in model_results.values():
+        if isinstance(result, dict):
+            if result.get("tokens_in") is not None:
+                total_in  += result["tokens_in"]
+                has_tokens = True
+            if result.get("tokens_out") is not None:
+                total_out += result["tokens_out"]
+            if result.get("latency_ms") is not None:
+                latencies.append(result["latency_ms"])
+
+    return {
+        "total_tokens_in":  total_in  if has_tokens else None,
+        "total_tokens_out": total_out if has_tokens else None,
+        "total_tokens":     (total_in + total_out) if has_tokens else None,
+        "slowest_ms":       round(max(latencies))  if latencies else None,
+        "fastest_ms":       round(min(latencies))  if latencies else None,
+        "avg_latency_ms":   round(sum(latencies) / len(latencies)) if latencies else None,
+    }
+
+
+def extract_text_responses(model_results: dict) -> dict:
+    """
+    Extract just the text strings from model results.
+    Used for consensus engine which expects plain strings.
+    """
+    return {
+        name: (r["text"] if isinstance(r, dict) else r)
+        for name, r in model_results.items()
+    }
