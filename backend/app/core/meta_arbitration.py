@@ -56,11 +56,11 @@ DOMAIN_THRESHOLDS = {
     "financial":    {"deliver": 75, "reflect": 55},
     "safety":       {"deliver": 85, "reflect": 65},
     "adversarial":  {"deliver": 95, "reflect": 90},  # Near-impossible to pass
-    "general":      {"deliver": 62, "reflect": 48},
-    "tier_a_safe":  {"deliver": 52, "reflect": 38},
-    "general_health":    {"deliver": 58, "reflect": 44},
-    "general_legal":     {"deliver": 58, "reflect": 44},
-    "general_financial": {"deliver": 58, "reflect": 44},
+    "general":      {"deliver": 55, "reflect": 40},
+    "tier_a_safe":  {"deliver": 48, "reflect": 35},
+    "general_health":    {"deliver": 52, "reflect": 38},
+    "general_legal":     {"deliver": 52, "reflect": 38},
+    "general_financial": {"deliver": 52, "reflect": 38},
 }
 
 

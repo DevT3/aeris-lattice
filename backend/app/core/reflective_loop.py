@@ -184,7 +184,8 @@ def reflective_review(response: str, prompt: str = "", domain: str = "general") 
                 {"role": "user", "content": challenge_prompt}
             ],
             temperature=0.1,   # Very low temperature for consistent auditing
-            max_tokens=600
+            max_tokens=600, 
+            timeout=25
         )
 
         revised = result.choices[0].message.content.strip()

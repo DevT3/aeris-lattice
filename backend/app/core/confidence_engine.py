@@ -21,9 +21,9 @@ DOMAIN_THRESHOLDS = {
     "safety":           {"cap": 48, "reason": "Safety domain — physical harm risk"},
     "cybersecurity":    {"cap": 55, "reason": "Cybersecurity domain — exploitation risk"},
     "adversarial":      {"cap": 20, "reason": "Adversarial prompt — high suppression bias"},
-    "general_health":   {"cap": 88, "reason": "Health-adjacent content"},
-    "general_legal":    {"cap": 88, "reason": "Legal-adjacent content"},
-    "general_financial":{"cap": 88, "reason": "Financial-adjacent content"},
+    "general_health":   {"cap": 92, "reason": "Health-adjacent content"},
+    "general_legal":    {"cap": 92, "reason": "Legal-adjacent content"},
+    "general_financial":{"cap": 92, "reason": "Financial-adjacent content"},
     "general":          {"cap": 92, "reason": "General domain — standard confidence"},
 }
 
@@ -64,58 +64,53 @@ APPROPRIATE_DEFERENCE = [
 
 def evaluate_confidence(response: str, prompt: str = "", domain: str = "") -> dict:
     """
-    Domain-aware confidence scoring with safe refusal bias.
+    Domain-aware confidence scoring.
+    Trusts the domain from prompt_classifier — does NOT re-detect from response text.
     """
-    text_combined = (response + " " + prompt).lower()
     response_lower = response.lower()
 
-    # ── Check for appropriate professional deference ───────────────────────────
-    # If the model is correctly deferring to professionals, boost confidence
-    # (this is the RIGHT behavior — we want to reward it)
-    deference_count = sum(1 for phrase in APPROPRIATE_DEFERENCE if phrase in response_lower)
-    if deference_count >= 2:
-        return {
-            "score": 72,
-            "reason": "Response appropriately defers to professional consultation",
-            "domain": domain or "general",
-            "deference_detected": True
-        }
-
-    # ── Strong uncertainty — significant penalty ───────────────────────────────
-    for phrase in STRONG_UNCERTAINTY:
-        if phrase in response_lower:
-            return {
-                "score": 42,
-                "reason": f"Strong uncertainty language detected: '{phrase}'",
-                "domain": domain or "general",
-                "deference_detected": False
-            }
-
-    # ── Mild uncertainty ───────────────────────────────────────────────────────
-    mild_count = sum(1 for phrase in MILD_UNCERTAINTY if phrase in response_lower)
-    if mild_count >= 2:
-        return {
-            "score": 58,
-            "reason": f"Multiple uncertainty markers detected ({mild_count})",
-            "domain": domain or "general",
-            "deference_detected": False
-        }
-
-    # ── Domain cap ────────────────────────────────────────────────────────────
-    # Determine domain from prompt + domain parameter
-    detected_domain = domain or _detect_domain_from_text(text_combined)
+    # Trust classifier domain directly — never re-detect from text
+    detected_domain = domain if domain else "general"
     domain_config = DOMAIN_THRESHOLDS.get(detected_domain, DOMAIN_THRESHOLDS["general"])
     cap = domain_config["cap"]
 
-    # If domain cap is below 70 (our typical threshold), it will trigger
-    # reflection or silence — this is intentional for high-risk domains
+    # Appropriate deference — model correctly recommends professional
+    deference_count = sum(1 for phrase in APPROPRIATE_DEFERENCE if phrase in response_lower)
+    if deference_count >= 2:
+        return {
+            "score": min(72, cap),
+            "reason": "Response appropriately defers to professional consultation",
+            "domain": detected_domain,
+            "deference_detected": True
+        }
+
+    # Strong uncertainty
+    for phrase in STRONG_UNCERTAINTY:
+        if phrase in response_lower:
+            return {
+                "score": min(42, cap),
+                "reason": f"Strong uncertainty detected: '{phrase}'",
+                "domain": detected_domain,
+                "deference_detected": False
+            }
+
+    # Mild uncertainty
+    mild_count = sum(1 for phrase in MILD_UNCERTAINTY if phrase in response_lower)
+    if mild_count >= 2:
+        return {
+            "score": min(58, cap),
+            "reason": f"Multiple uncertainty markers detected ({mild_count})",
+            "domain": detected_domain,
+            "deference_detected": False
+        }
+
+    # Clean response — return domain cap directly
     return {
         "score": cap,
         "reason": domain_config["reason"],
         "domain": detected_domain,
         "deference_detected": False
     }
-
 
 def _detect_domain_from_text(text: str) -> str:
     """

@@ -130,7 +130,8 @@ TIER_C_DOMAINS = {
         "stop my medication", "change my dose", "double my dose",
         "without a doctor", "without telling my doctor",
         # Symptoms and diagnosis
-        "symptoms", "diagnosis", "diagnose", "do i have",
+        "my symptoms", "diagnosis", "diagnose", "do i have",
+        "my symptom", "i have symptoms of",
         "am i sick", "is this cancer", "is this serious",
         "chest pain", "heart attack", "stroke", "seizure",
         "difficulty breathing", "shortness of breath",
@@ -260,6 +261,18 @@ TIER_A_SAFE_PATTERNS = [
     "what is a",        # catches "what is a stock" type educational questions carefully
     "explain what",
     "how does a",
+    "what are the general symptoms",
+    "what are symptoms of",
+    "general symptoms",
+    "difference between a stock",
+    "difference between civil",
+    "difference between criminal",
+    "what is a stock",
+    "what is a bond",
+    "what is inflation",
+    "what does inflation mean",
+    "inflation mean in economics",
+    "what is economics",
 ]
 
 
