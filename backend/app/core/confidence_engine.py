@@ -1,49 +1,146 @@
-HIGH_RISK_DOMAINS = {
-    "medical": [
-        "medication", "drug", "dose", "symptoms", "diagnosis", "prescription",
-        "surgery", "antibiotic", "pain", "disease", "cancer", "insulin",
-        "overdose", "bleeding", "chest pain", "heart"
-    ],
-    "legal": [
-        "lawsuit", "legal", "lawyer", "attorney", "court", "judge", "irs",
-        "tax audit", "illegal", "arrest", "contract", "sue", "penalty",
-        "criminal", "jurisdiction", "ignore", "notice"
-    ],
-    "financial": [
-        "guaranteed", "investment", "returns", "profit", "stocks", "crypto",
-        "savings", "loan", "debt", "bankruptcy", "hedge fund", "broker"
-    ]
+"""
+AERIS Lattice v2.1 — Confidence Engine
+Redesigned for near-zero dangerous delivery.
+
+Key changes from v2.0:
+    - Domain-aware scoring (not just keyword penalty)
+    - Semantic weighting replaces fixed model weights
+    - Uncertainty language detection expanded
+    - Professional boundary detection
+    - Scores calibrated for enterprise-grade safe refusal bias
+"""
+
+# ── Domain thresholds ──────────────────────────────────────────────────────────
+# Philosophy: accept up to 15% false refusal in exchange for near-zero
+# dangerous delivery in high-risk domains.
+
+DOMAIN_THRESHOLDS = {
+    "medical":          {"cap": 52, "reason": "Medical domain — professional judgment required"},
+    "legal":            {"cap": 54, "reason": "Legal domain — jurisdiction-specific advice required"},
+    "financial":        {"cap": 56, "reason": "Financial domain — licensed advisor required"},
+    "safety":           {"cap": 48, "reason": "Safety domain — physical harm risk"},
+    "cybersecurity":    {"cap": 55, "reason": "Cybersecurity domain — exploitation risk"},
+    "adversarial":      {"cap": 20, "reason": "Adversarial prompt — high suppression bias"},
+    "general_health":   {"cap": 82, "reason": "Health-adjacent content"},
+    "general_legal":    {"cap": 82, "reason": "Legal-adjacent content"},
+    "general_financial":{"cap": 82, "reason": "Financial-adjacent content"},
+    "general":          {"cap": 90, "reason": "General domain — standard confidence"},
 }
 
-UNCERTAIN_WORDS = [
-    "maybe", "perhaps", "possibly", "i think", "not sure",
-    "unclear", "uncertain", "might", "could be"
+# ── Uncertainty language — expanded ───────────────────────────────────────────
+STRONG_UNCERTAINTY = [
+    "i'm not sure", "i don't know", "i cannot be certain",
+    "i cannot guarantee", "unclear", "uncertain", "i'm uncertain",
+    "it's possible that", "it's unclear", "results may vary",
+    "consult a professional", "consult a doctor", "consult a lawyer",
+    "consult a financial", "seek professional advice",
+    "i recommend speaking", "i strongly recommend",
+    "this is not medical advice", "this is not legal advice",
+    "individual results may vary", "cannot provide medical",
+    "cannot provide legal", "cannot provide financial",
+    "please consult", "you should speak with",
+    "i would recommend seeing", "i urge you to",
 ]
 
-def evaluate_confidence(response: str, prompt: str = "") -> dict:
-    combined = (response + " " + prompt).lower()
+MILD_UNCERTAINTY = [
+    "maybe", "perhaps", "possibly", "might", "could be",
+    "generally", "typically", "usually", "in most cases",
+    "it depends", "varies", "not always",
+]
 
-    # Check for uncertain language
-    for word in UNCERTAIN_WORDS:
-        if word in response.lower():
+# ── Professional boundary signals ──────────────────────────────────────────────
+# When a model correctly defers to professionals, this is GOOD.
+# We reward appropriate deference by NOT penalizing it.
+APPROPRIATE_DEFERENCE = [
+    "consult a doctor", "see a doctor", "speak with a doctor",
+    "consult a lawyer", "speak with an attorney",
+    "consult a financial advisor", "speak with a financial",
+    "seek medical attention", "go to the emergency",
+    "call 911", "emergency room",
+    "i cannot provide medical", "i cannot provide legal",
+    "please seek professional",
+]
+
+
+def evaluate_confidence(response: str, prompt: str = "", domain: str = "") -> dict:
+    """
+    Domain-aware confidence scoring with safe refusal bias.
+    """
+    text_combined = (response + " " + prompt).lower()
+    response_lower = response.lower()
+
+    # ── Check for appropriate professional deference ───────────────────────────
+    # If the model is correctly deferring to professionals, boost confidence
+    # (this is the RIGHT behavior — we want to reward it)
+    deference_count = sum(1 for phrase in APPROPRIATE_DEFERENCE if phrase in response_lower)
+    if deference_count >= 2:
+        return {
+            "score": 72,
+            "reason": "Response appropriately defers to professional consultation",
+            "domain": domain or "general",
+            "deference_detected": True
+        }
+
+    # ── Strong uncertainty — significant penalty ───────────────────────────────
+    for phrase in STRONG_UNCERTAINTY:
+        if phrase in response_lower:
             return {
-                "score": 45,
-                "reason": f"Uncertain language detected: '{word}'",
-                "domain": "general"
+                "score": 42,
+                "reason": f"Strong uncertainty language detected: '{phrase}'",
+                "domain": domain or "general",
+                "deference_detected": False
             }
 
-    # Check for high-risk domain in prompt or response
-    for domain, keywords in HIGH_RISK_DOMAINS.items():
-        for keyword in keywords:
-            if keyword in combined:
-                return {
-                    "score": 55,
-                    "reason": f"High-risk domain detected: {domain}",
-                    "domain": domain
-                }
+    # ── Mild uncertainty ───────────────────────────────────────────────────────
+    mild_count = sum(1 for phrase in MILD_UNCERTAINTY if phrase in response_lower)
+    if mild_count >= 2:
+        return {
+            "score": 58,
+            "reason": f"Multiple uncertainty markers detected ({mild_count})",
+            "domain": domain or "general",
+            "deference_detected": False
+        }
 
+    # ── Domain cap ────────────────────────────────────────────────────────────
+    # Determine domain from prompt + domain parameter
+    detected_domain = domain or _detect_domain_from_text(text_combined)
+    domain_config = DOMAIN_THRESHOLDS.get(detected_domain, DOMAIN_THRESHOLDS["general"])
+    cap = domain_config["cap"]
+
+    # If domain cap is below 70 (our typical threshold), it will trigger
+    # reflection or silence — this is intentional for high-risk domains
     return {
-        "score": 90,
-        "reason": "Response structure appears stable",
-        "domain": "general"
+        "score": cap,
+        "reason": domain_config["reason"],
+        "domain": detected_domain,
+        "deference_detected": False
     }
+
+
+def _detect_domain_from_text(text: str) -> str:
+    """
+    Secondary domain detection for cases where classify_prompt
+    didn't identify a domain but the response content reveals one.
+    """
+    medical_signals = [
+        "medication", "drug", "dose", "symptoms", "diagnosis",
+        "treatment", "medical", "doctor", "hospital", "prescription"
+    ]
+    legal_signals = [
+        "legal", "law", "court", "attorney", "lawyer",
+        "contract", "rights", "jurisdiction", "lawsuit"
+    ]
+    financial_signals = [
+        "investment", "returns", "profit", "stock", "financial",
+        "money", "savings", "portfolio", "risk"
+    ]
+
+    med_count   = sum(1 for s in medical_signals   if s in text)
+    legal_count = sum(1 for s in legal_signals     if s in text)
+    fin_count   = sum(1 for s in financial_signals if s in text)
+
+    if med_count >= 3:   return "medical"
+    if legal_count >= 3: return "legal"
+    if fin_count >= 3:   return "financial"
+
+    return "general"

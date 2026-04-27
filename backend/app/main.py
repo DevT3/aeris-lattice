@@ -1,12 +1,13 @@
 """
-AERIS Lattice v2 — Main Application
-Dual Consensus Architecture with Tiered Routing, Ethical Anchor,
-Sovereign Layer, and Meta-Arbitration Engine.
+AERIS Lattice v2.1 — Main Application
+Optimized for near-zero dangerous delivery.
 
-New in this version:
-    - mode parameter: "optimized" (tiered) or "full" (all 5 models always)
-    - Token usage tracking per model and aggregate
-    - Response latency per model and aggregate
+Key changes from v2.0:
+    - Domain passed through all pipeline layers
+    - Contradiction score penalty applied to confidence
+    - Reflection uses domain-aware adversarial prompts
+    - Reflection refusal signal handled explicitly
+    - Failure registry logged with classification
 """
 
 import re
@@ -26,7 +27,9 @@ from backend.app.services.llm_service import (
     ALL_MODELS
 )
 from backend.app.core.confidence_engine import evaluate_confidence
-from backend.app.core.reflective_loop import reflective_review
+from backend.app.core.reflective_loop import (
+    reflective_review, is_reflection_refusal, extract_refusal_reason
+)
 from backend.app.core.silent_state import enter_silent_state
 from backend.app.core.contradiction_lattice import detect_contradiction
 from backend.app.core.consensus_engine import calculate_consensus
@@ -39,14 +42,14 @@ from backend.app.core.sovereign_layer import run_sovereign_consensus
 from backend.app.core.meta_arbitration import run_meta_arbitration, FinalVerdict
 
 app = FastAPI(
-    title="AERIS Lattice v2",
-    description="Dual Consensus reliability architecture for LLMs — inference-time validation"
+    title="AERIS Lattice v2.1",
+    description="Dual Consensus reliability architecture — optimized for near-zero dangerous delivery"
 )
 
 app.mount("/static", StaticFiles(directory="backend/app/static"), name="static")
 
 
-# ── Helper ─────────────────────────────────────────────────────────────────────
+# ── Silent response helper ─────────────────────────────────────────────────────
 
 def silent_response(
     all_responses: dict,
@@ -82,13 +85,9 @@ def silent_response(
 @app.get("/")
 def root():
     return {
-        "status": "AERIS Lattice v2 Online",
-        "message": "Dual Consensus — Epistemic validation active",
-        "architecture": {
-            "layer_1": "External consensus — OpenAI, Groq, Mistral, Gemini, Local",
-            "layer_2": "Sovereign consensus — Skeptic, Compliance, Adversarial, Auditor, Judge",
-            "layer_3": "Meta-Arbitration Engine"
-        }
+        "status":  "AERIS Lattice v2.1 Online",
+        "message": "Dual Consensus — Optimized for near-zero dangerous delivery",
+        "version": "2.1.0"
     }
 
 
@@ -106,18 +105,17 @@ def reliability_dashboard():
 def ask(request: AskRequest):
     request_start = time.time()
 
-    # Step 1: Classify prompt
+    # Step 1: Classify prompt — determines tier, domain, thresholds, models
     classification = classify_prompt(request.prompt)
     tier           = classification.tier
+    domain         = classification.domain
     conf_threshold = classification.confidence_threshold
 
     # Step 2: Determine models based on mode
-    # "full"      → always all 5 models
-    # "optimized" → tiered routing (default, saves tokens)
-    mode = getattr(request, "mode", "optimized") or "optimized"
+    mode          = getattr(request, "mode", "optimized") or "optimized"
     models_to_use = ALL_MODELS if mode == "full" else classification.models_required
 
-    # Step 3: Query models — get rich results with token/latency data
+    # Step 3: Query models
     raw_results    = ask_models_selective(request.prompt, models_to_use)
     usage_summary  = compute_usage_summary(raw_results)
     text_responses = extract_text_responses(raw_results)
@@ -144,30 +142,45 @@ def ask(request: AskRequest):
 
     if external_consensus["consensus_score"] < 40 or external_consensus["primary_response"] is None:
         log_decision(request.prompt, str(text_responses), 0,
-                     f"silent_state — no external consensus (tier: {tier})")
+                     f"silent_state — no external consensus (tier:{tier} domain:{domain})")
         return silent_response(
             all_model_responses, tier, external_consensus, 0,
             "external_consensus_critically_low",
             usage=usage_summary, total_latency_ms=total_latency,
-            model_stats=model_stats, mode=mode
+            model_stats=model_stats, mode=mode, domain=domain
         )
 
     response = external_consensus["primary_response"]
 
-    # Step 5: Contradiction Lattice
-    contradiction = detect_contradiction(response)
+    # Step 5: Contradiction Lattice — now domain-aware with severity scoring
+    contradiction = detect_contradiction(response, domain)
+
+    # Apply contradiction score penalty to confidence
+    contradiction_penalty = contradiction.get("score_penalty", 0)
+
+    # Critical contradiction — immediate silent state
+    if contradiction.get("contradiction") and contradiction.get("severity") == "critical":
+        log_decision(request.prompt, response, 0,
+                     f"silent_state — critical contradiction (tier:{tier} domain:{domain} category:{contradiction.get('category')})")
+        return silent_response(
+            all_model_responses, tier, external_consensus, 0,
+            "critical_contradiction_detected",
+            usage=usage_summary, total_latency_ms=total_latency,
+            model_stats=model_stats, mode=mode, domain=domain,
+            contradiction=contradiction
+        )
 
     # Step 6: Ethical Anchor
     if classification.ethical_anchor_required:
         ethical_result = evaluate_ethical_anchor(request.prompt, response)
         if ethical_result.refusal_type == RefusalType.HARD:
             log_decision(request.prompt, response, 0,
-                         f"silent_state — ethical_anchor_hard_refusal: {ethical_result.pillar_triggered}")
+                         f"silent_state — ethical_anchor_hard_refusal:{ethical_result.pillar_triggered}")
             return silent_response(
                 all_model_responses, tier, external_consensus, 0,
                 "ethical_anchor_hard_refusal",
                 usage=usage_summary, total_latency_ms=total_latency,
-                model_stats=model_stats, mode=mode,
+                model_stats=model_stats, mode=mode, domain=domain,
                 ethical_anchor={
                     "pillar":      ethical_result.pillar_triggered,
                     "explanation": ethical_result.hard_refusal_reason
@@ -187,39 +200,57 @@ def ask(request: AskRequest):
     if classification.sovereign_layer_required:
         sovereign_result = run_sovereign_consensus(request.prompt, response)
         if sovereign_result.get("veto_applied"):
-            log_decision(request.prompt, response, 0, "silent_state — sovereign_judge_veto")
+            log_decision(request.prompt, response, 0,
+                         f"silent_state — sovereign_judge_veto (domain:{domain})")
             return silent_response(
                 all_model_responses, tier, external_consensus, 0,
                 "sovereign_judge_veto",
                 usage=usage_summary, total_latency_ms=total_latency,
-                model_stats=model_stats, mode=mode,
+                model_stats=model_stats, mode=mode, domain=domain,
                 sovereign_layer=sovereign_result
             )
 
-    # Step 8: Confidence Engine
-    confidence = evaluate_confidence(response, request.prompt)
+    # Step 8: Confidence Engine — now receives domain for accurate scoring
+    confidence = evaluate_confidence(response, request.prompt, domain)
 
+    # Apply ethical penalty
     if ethical_result and ethical_result.penalty_points > 0:
         confidence["score"] = max(0, confidence["score"] - ethical_result.penalty_points)
         confidence["ethical_penalty_applied"] = ethical_result.penalty_points
-        confidence["reason"] = (
-            f"{confidence['reason']} | "
-            f"Ethical anchor penalty: -{ethical_result.penalty_points} pts "
-            f"({ethical_result.pillar_triggered})"
-        )
 
-    # Step 9: Reflective Loop
+    # Apply contradiction medium penalty (non-critical)
+    if contradiction_penalty > 0 and not contradiction.get("contradiction"):
+        confidence["score"] = max(0, confidence["score"] - contradiction_penalty)
+        confidence["contradiction_penalty_applied"] = contradiction_penalty
+
+    # Step 9: Reflective Loop — now adversarial and domain-aware
     if confidence["score"] < conf_threshold:
-        response   = reflective_review(response)
-        confidence = evaluate_confidence(response, request.prompt)
+        revised = reflective_review(response, request.prompt, domain)
+
+        # Reflection returned a refusal signal
+        if is_reflection_refusal(revised):
+            reason = extract_refusal_reason(revised)
+            log_decision(request.prompt, response, 0,
+                         f"silent_state — reflection_refusal (domain:{domain}): {reason[:100]}")
+            return silent_response(
+                all_model_responses, tier, external_consensus, 0,
+                "reflection_refusal",
+                usage=usage_summary, total_latency_ms=total_latency,
+                model_stats=model_stats, mode=mode, domain=domain,
+                reflection_reason=reason
+            )
+
+        response   = revised
+        confidence = evaluate_confidence(response, request.prompt, domain)
+
         if confidence["score"] < conf_threshold:
             log_decision(request.prompt, response, confidence["score"],
-                         f"silent_state — low confidence after reflection (tier: {tier})")
+                         f"silent_state — low confidence after reflection (tier:{tier} domain:{domain})")
             return silent_response(
                 all_model_responses, tier, external_consensus, 0,
                 "low_confidence_after_reflection",
                 usage=usage_summary, total_latency_ms=total_latency,
-                model_stats=model_stats, mode=mode,
+                model_stats=model_stats, mode=mode, domain=domain,
                 confidence=confidence
             )
 
@@ -239,7 +270,7 @@ def ask(request: AskRequest):
         contradiction=contradiction,
         classification={
             "tier":         tier,
-            "domain":       classification.domain,
+            "domain":       domain,
             "risk_signals": classification.risk_signals
         }
     )
@@ -247,26 +278,26 @@ def ask(request: AskRequest):
     # Step 11: Final decision
     if meta_result.verdict == FinalVerdict.SILENT:
         log_decision(request.prompt, response, meta_result.trust_score,
-                     f"silent_state — meta_arbitration: {meta_result.primary_refusal_reason}")
+                     f"silent_state — meta_arbitration:{meta_result.primary_refusal_reason} (domain:{domain})")
         return silent_response(
             all_model_responses, tier, external_consensus,
             meta_result.trust_score, meta_result.primary_refusal_reason,
             usage=usage_summary, total_latency_ms=total_latency,
-            model_stats=model_stats, mode=mode,
+            model_stats=model_stats, mode=mode, domain=domain,
             delivery_confidence=meta_result.delivery_confidence,
             refusal_chain=meta_result.refusal_chain,
             explanation=meta_result.explanation
         )
 
     log_decision(request.prompt, response, meta_result.trust_score,
-                 f"delivered — trust_score: {meta_result.trust_score} tier: {tier} mode: {mode}")
+                 f"delivered — trust:{meta_result.trust_score} tier:{tier} domain:{domain} mode:{mode}")
 
     return {
         "final_response":      response,
         "trust_score":         meta_result.trust_score,
         "delivery_confidence": meta_result.delivery_confidence,
         "tier":                tier,
-        "domain":              classification.domain,
+        "domain":              domain,
         "risk_signals":        classification.risk_signals,
         "mode":                mode,
         "confidence":          confidence,
@@ -337,6 +368,7 @@ def reliability_stats():
         s = entry["status"]
         if "contradiction" in s:    d = "contradiction"
         elif "low confidence" in s: d = "low_confidence"
+        elif "reflection" in s:     d = "reflection"
         elif "no consensus" in s:   d = "no_consensus"
         elif "ethical" in s:        d = "ethical_anchor"
         elif "sovereign" in s:      d = "sovereign_veto"
@@ -368,7 +400,7 @@ def benchmark_latest():
     files = sorted(glob.glob("tests/benchmark_results/benchmark_*.json"))
     if not files:
         raise HTTPException(status_code=404,
-                            detail="No benchmark results found. Run: python tests/run_benchmark.py --version v1.0")
+                            detail="No benchmark results found.")
     with open(files[-1], "r") as f:
         return json.load(f)
 
