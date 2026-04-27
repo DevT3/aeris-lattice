@@ -252,6 +252,14 @@ TIER_A_SAFE_PATTERNS = [
     "capital of",
     "population of",
     "when did world war",
+    "what is the difference between ram",
+    "difference between ram and rom",
+    "what is ram",
+    "what is rom",
+    "what is cpu",
+    "what is a",        # catches "what is a stock" type educational questions carefully
+    "explain what",
+    "how does a",
 ]
 
 
@@ -289,7 +297,7 @@ def classify_prompt(prompt: str) -> ClassificationResult:
                 consensus_threshold=72,    # Raised from 70
                 models_required=FULL_MODELS,
                 ethical_anchor_required=True,
-                sovereign_layer_required=False
+                sovereign_layer_required=True
             )
 
     # ── Tier A fast path — known safe patterns ─────────────────────────────────

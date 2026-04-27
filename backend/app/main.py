@@ -170,7 +170,21 @@ def ask(request: AskRequest):
             contradiction=contradiction
         )
 
-    # Step 6: Ethical Anchor
+    # Step 6: Sovereign Layer — runs before ethical anchor so it always executes
+    sovereign_result = None
+    if classification.sovereign_layer_required:
+       sovereign_result = run_sovereign_consensus(request.prompt, response)
+       if sovereign_result.get("veto_applied"):
+            log_decision(request.prompt, response, 0, "silent_state — sovereign_judge_veto")
+            return silent_response(
+            all_model_responses, tier, external_consensus, 0,
+            "sovereign_judge_veto",
+            usage=usage_summary, total_latency_ms=total_latency,
+            model_stats=model_stats, mode=mode, domain=domain,
+            sovereign_layer=sovereign_result
+        )
+    
+    # Step 7: Ethical Anchor
     if classification.ethical_anchor_required:
         ethical_result = evaluate_ethical_anchor(request.prompt, response)
         if ethical_result.refusal_type == RefusalType.HARD:
@@ -194,21 +208,6 @@ def ask(request: AskRequest):
             explanation="Ethical anchor not required for this tier.",
             hard_refusal_reason=None
         )
-
-    # Step 7: Sovereign Layer (Tier C/D only)
-    sovereign_result = None
-    if classification.sovereign_layer_required:
-        sovereign_result = run_sovereign_consensus(request.prompt, response)
-        if sovereign_result.get("veto_applied"):
-            log_decision(request.prompt, response, 0,
-                         f"silent_state — sovereign_judge_veto (domain:{domain})")
-            return silent_response(
-                all_model_responses, tier, external_consensus, 0,
-                "sovereign_judge_veto",
-                usage=usage_summary, total_latency_ms=total_latency,
-                model_stats=model_stats, mode=mode, domain=domain,
-                sovereign_layer=sovereign_result
-            )
 
     # Step 8: Confidence Engine — now receives domain for accurate scoring
     confidence = evaluate_confidence(response, request.prompt, domain)

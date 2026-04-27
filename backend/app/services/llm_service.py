@@ -7,7 +7,7 @@ Returns token usage and latency per model for UI display.
 import os
 import time
 import requests as http_requests
-import google.generativeai as genai
+from google import genai as google_genai
 from openai import OpenAI
 from groq import Groq
 from mistralai.client import Mistral
@@ -17,7 +17,7 @@ load_dotenv()
 
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 groq_client   = Groq(api_key=os.getenv("GROQ_API_KEY"))
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+google_genai_client = google_genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 SYSTEM_PROMPT = (
     "You are a precise, reliable assistant. "
@@ -121,16 +121,18 @@ def ask_mistral(prompt: str) -> dict:
 def ask_gemini(prompt: str) -> dict:
     t0 = time.time()
     try:
-        model = genai.GenerativeModel("gemini-2.5-flash")
-        res   = model.generate_content(f"{SYSTEM_PROMPT}\n\n{prompt}")
+        response = google_genai_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=f"{SYSTEM_PROMPT}\n\n{prompt}"
+        )
         tokens_in  = None
         tokens_out = None
         try:
-            tokens_in  = res.usage_metadata.prompt_token_count
-            tokens_out = res.usage_metadata.candidates_token_count
+            tokens_in  = response.usage_metadata.prompt_token_count
+            tokens_out = response.usage_metadata.candidates_token_count
         except Exception:
             pass
-        return _model_result(res.text, tokens_in, tokens_out, (time.time() - t0) * 1000)
+        return _model_result(response.text, tokens_in, tokens_out, (time.time() - t0) * 1000)
     except Exception as e:
         return _model_result(f"Gemini error: {str(e)}", None, None, (time.time() - t0) * 1000)
 
@@ -186,7 +188,6 @@ MODEL_REGISTRY = {
     "groq":    ask_groq,
     "mistral": ask_mistral,
     "gemini":  ask_gemini,
-    "local":   ask_local,
 }
 
 ALL_MODELS  = list(MODEL_REGISTRY.keys())
@@ -195,14 +196,13 @@ FULL_MODELS = ALL_MODELS
 
 
 def ask_models_selective(prompt: str, models: list) -> dict:
-    """
-    Query only specified models. Returns dict of model_name → result dict.
-    Each result has: text, tokens_in, tokens_out, latency_ms, error
-    """
+    import time
     results = {}
     for name in models:
         if name in MODEL_REGISTRY:
             results[name] = MODEL_REGISTRY[name](prompt)
+            if name == "local":
+                time.sleep(1.5)  # Give Ollama time to fully release before sovereign layer
     return results
 
 

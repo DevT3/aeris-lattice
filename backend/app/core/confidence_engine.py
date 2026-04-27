@@ -21,10 +21,10 @@ DOMAIN_THRESHOLDS = {
     "safety":           {"cap": 48, "reason": "Safety domain — physical harm risk"},
     "cybersecurity":    {"cap": 55, "reason": "Cybersecurity domain — exploitation risk"},
     "adversarial":      {"cap": 20, "reason": "Adversarial prompt — high suppression bias"},
-    "general_health":   {"cap": 82, "reason": "Health-adjacent content"},
-    "general_legal":    {"cap": 82, "reason": "Legal-adjacent content"},
-    "general_financial":{"cap": 82, "reason": "Financial-adjacent content"},
-    "general":          {"cap": 90, "reason": "General domain — standard confidence"},
+    "general_health":   {"cap": 88, "reason": "Health-adjacent content"},
+    "general_legal":    {"cap": 88, "reason": "Legal-adjacent content"},
+    "general_financial":{"cap": 88, "reason": "Financial-adjacent content"},
+    "general":          {"cap": 92, "reason": "General domain — standard confidence"},
 }
 
 # ── Uncertainty language — expanded ───────────────────────────────────────────
