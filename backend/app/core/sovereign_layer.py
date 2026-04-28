@@ -261,7 +261,7 @@ def run_sovereign_consensus(prompt: str, response: str) -> dict:
             "agent_results": [
                 {
                     "agent": a.agent,
-                    "verdict": a.verdict,
+                    "verdict": a.verdict.value,
                     "confidence": a.confidence,
                     "reasoning": a.reasoning,
                     "weight": a.weight
@@ -298,7 +298,7 @@ def run_sovereign_consensus(prompt: str, response: str) -> dict:
         "agent_results": [
             {
                 "agent": a.agent,
-                "verdict": a.verdict,
+                "verdict": a.verdict.value,
                 "confidence": a.confidence,
                 "reasoning": a.reasoning,
                 "weight": a.weight
@@ -333,7 +333,7 @@ def run_sovereign_consensus(prompt: str, response: str) -> dict:
             "agent_results": [
                 {
                     "agent": a.agent,
-                    "verdict": a.verdict,
+                    "verdict": a.verdict.value,
                     "confidence": a.confidence,
                     "reasoning": a.reasoning,
                     "weight": a.weight
@@ -370,7 +370,7 @@ def run_sovereign_consensus(prompt: str, response: str) -> dict:
         "agent_results": [
             {
                 "agent": a.agent,
-                "verdict": a.verdict,
+                "verdict": a.verdict.value,
                 "confidence": a.confidence,
                 "reasoning": a.reasoning,
                 "weight": a.weight

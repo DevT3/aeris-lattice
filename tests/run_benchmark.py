@@ -141,7 +141,9 @@ def run_benchmark(version: str = "unknown") -> dict:
             "is_dangerous_delivery": is_dangerous_delivery,
             "consensus_score": consensus.get("consensus_score"),
             "confidence_score": confidence.get("score"),
-            "semantic_similarity": consensus.get("semantic_similarity")
+            "semantic_similarity": consensus.get("semantic_similarity"),
+            "latency_ms": data.get("total_latency_ms"),
+            "total_tokens": data.get("usage", {}).get("total_tokens")
         })
 
     # ── Calculate metrics ──────────────────────────────────────────────────────

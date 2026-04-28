@@ -1,19 +1,22 @@
 """
-AERIS Lattice v2.1 — Main Application
-Optimized for near-zero dangerous delivery.
+AERIS Lattice v3.0 — Main Application
+Async parallel orchestration — sequential model calls replaced with
+asyncio.gather() for true parallel execution.
 
-Key changes from v2.0:
-    - Domain passed through all pipeline layers
-    - Contradiction score penalty applied to confidence
-    - Reflection uses domain-aware adversarial prompts
-    - Reflection refusal signal handled explicitly
-    - Failure registry logged with classification
+Key changes from v2.9:
+    - /ask endpoint converted from def to async def
+    - Model queries use await ask_models_parallel() — all models fire simultaneously
+    - Partial consensus: if a model times out, system proceeds with remaining models
+    - Timeout alert included in response (partial_consensus: true)
+    - All pipeline steps remain sequential after model responses are collected
+    - Sovereign layer still runs sequentially (Ollama single-threaded constraint)
 """
 
 import re
 import glob
 import json
 import time
+import asyncio
 from collections import defaultdict
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -21,7 +24,7 @@ from fastapi.responses import FileResponse
 
 from backend.app.models.request_models import AskRequest
 from backend.app.services.llm_service import (
-    ask_models_selective,
+    ask_models_parallel,
     compute_usage_summary,
     extract_text_responses,
     ALL_MODELS
@@ -42,8 +45,8 @@ from backend.app.core.sovereign_layer import run_sovereign_consensus
 from backend.app.core.meta_arbitration import run_meta_arbitration, FinalVerdict
 
 app = FastAPI(
-    title="AERIS Lattice v2.1",
-    description="Dual Consensus reliability architecture — optimized for near-zero dangerous delivery"
+    title="AERIS Lattice v3.0",
+    description="Dual Consensus reliability architecture — async parallel orchestration"
 )
 
 app.mount("/static", StaticFiles(directory="backend/app/static"), name="static")
@@ -85,9 +88,9 @@ def silent_response(
 @app.get("/")
 def root():
     return {
-        "status":  "AERIS Lattice v2.1 Online",
-        "message": "Dual Consensus — Optimized for near-zero dangerous delivery",
-        "version": "2.1.0"
+        "status":  "AERIS Lattice v3.0 Online",
+        "message": "Dual Consensus — Async parallel orchestration active",
+        "version": "3.0.0"
     }
 
 
@@ -102,23 +105,41 @@ def reliability_dashboard():
 
 
 @app.post("/ask")
-def ask(request: AskRequest):
+async def ask(request: AskRequest):
+    """
+    Main validation pipeline — now async.
+    Model queries run in parallel. All downstream steps remain sequential.
+    """
     request_start = time.time()
 
-    # Step 1: Classify prompt — determines tier, domain, thresholds, models
+    # ── Step 1: Classify prompt ───────────────────────────────────────────────
     classification = classify_prompt(request.prompt)
     tier           = classification.tier
     domain         = classification.domain
     conf_threshold = classification.confidence_threshold
 
-    # Step 2: Determine models based on mode
+    # ── Step 2: Determine models based on mode ────────────────────────────────
     mode          = getattr(request, "mode", "optimized") or "optimized"
-    models_to_use = ALL_MODELS if mode == "full" else classification.models_required
 
-    # Step 3: Query models
-    raw_results    = ask_models_selective(request.prompt, models_to_use)
+    if mode == "sovereign":
+        # Force all 4 cloud models + force sovereign layer regardless of tier
+        models_to_use = ALL_MODELS
+        classification.sovereign_layer_required = True
+        classification.ethical_anchor_required = True
+    elif mode == "full":
+        models_to_use = ALL_MODELS
+    else:
+        models_to_use = classification.models_required
+
+    # ── Step 3: Query models IN PARALLEL ─────────────────────────────────────
+    # All model API calls fire simultaneously via asyncio.gather()
+    # If a model exceeds MODEL_TIMEOUT_S it is excluded from consensus
+    # and marked as timed_out in the response — system proceeds with
+    # partial consensus from remaining models
+    raw_results = await ask_models_parallel(request.prompt, models_to_use)
+
     usage_summary  = compute_usage_summary(raw_results)
-    text_responses = extract_text_responses(raw_results)
+    text_responses = extract_text_responses(raw_results)  # excludes timed-out models
     total_latency  = round((time.time() - request_start) * 1000)
 
     all_model_responses = {
@@ -131,13 +152,17 @@ def ask(request: AskRequest):
             "tokens_in":  r.get("tokens_in"),
             "tokens_out": r.get("tokens_out"),
             "latency_ms": r.get("latency_ms"),
-            "error":      r.get("error", False)
+            "error":      r.get("error", False),
+            "timed_out":  r.get("timed_out", False)
         }
         for name, r in raw_results.items()
         if isinstance(r, dict)
     }
+    
+    # Initialize sovereign_result early so all early exits can reference it
+    sovereign_result = None
 
-    # Step 4: External consensus
+    # ── Step 4: External consensus ────────────────────────────────────────────
     external_consensus = calculate_consensus(text_responses)
 
     if external_consensus["consensus_score"] < 40 or external_consensus["primary_response"] is None:
@@ -147,44 +172,49 @@ def ask(request: AskRequest):
             all_model_responses, tier, external_consensus, 0,
             "external_consensus_critically_low",
             usage=usage_summary, total_latency_ms=total_latency,
-            model_stats=model_stats, mode=mode, domain=domain
+            model_stats=model_stats, mode=mode, domain=domain,
+            sovereign_layer=sovereign_result
         )
 
     response = external_consensus["primary_response"]
 
-    # Step 5: Contradiction Lattice — now domain-aware with severity scoring
+    # ── Step 5: Contradiction Lattice ─────────────────────────────────────────
     contradiction = detect_contradiction(response, domain)
-
-    # Apply contradiction score penalty to confidence
     contradiction_penalty = contradiction.get("score_penalty", 0)
 
-    # Critical contradiction — immediate silent state
-    if contradiction.get("contradiction") and contradiction.get("severity") == "critical":
+    if contradiction.get("contradiction") and contradiction.get("severity") == "critical" and mode != "sovereign":
         log_decision(request.prompt, response, 0,
-                     f"silent_state — critical contradiction (tier:{tier} domain:{domain} category:{contradiction.get('category')})")
+                     f"silent_state — critical contradiction (tier:{tier} domain:{domain})")
         return silent_response(
             all_model_responses, tier, external_consensus, 0,
             "critical_contradiction_detected",
             usage=usage_summary, total_latency_ms=total_latency,
             model_stats=model_stats, mode=mode, domain=domain,
-            contradiction=contradiction
-        )
-
-    # Step 6: Sovereign Layer — runs before ethical anchor so it always executes
-    sovereign_result = None
-    if classification.sovereign_layer_required:
-       sovereign_result = run_sovereign_consensus(request.prompt, response)
-       if sovereign_result.get("veto_applied"):
-            log_decision(request.prompt, response, 0, "silent_state — sovereign_judge_veto")
-            return silent_response(
-            all_model_responses, tier, external_consensus, 0,
-            "sovereign_judge_veto",
-            usage=usage_summary, total_latency_ms=total_latency,
-            model_stats=model_stats, mode=mode, domain=domain,
+            contradiction=contradiction,
             sovereign_layer=sovereign_result
         )
-    
-    # Step 7: Ethical Anchor
+
+  # ── Step 6: Sovereign Layer ───────────────────────────────────────────────
+    # Runs if: Tier C/D classification OR mode=sovereign (forced)
+    # In sovereign mode runs before other gates via early execution above
+    sovereign_result = None
+    if classification.sovereign_layer_required or mode == "sovereign":
+        loop = asyncio.get_running_loop()
+        sovereign_result = await loop.run_in_executor(
+            None, run_sovereign_consensus, request.prompt, response
+        )
+        if sovereign_result.get("veto_applied"):
+            log_decision(request.prompt, response, 0,
+                         f"silent_state — sovereign_judge_veto (domain:{domain})")
+            return silent_response(
+                all_model_responses, tier, external_consensus, 0,
+                "sovereign_judge_veto",
+                usage=usage_summary, total_latency_ms=total_latency,
+                model_stats=model_stats, mode=mode, domain=domain,
+                sovereign_layer=sovereign_result
+            )
+
+    # ── Step 7: Ethical Anchor ────────────────────────────────────────────────
     if classification.ethical_anchor_required:
         ethical_result = evaluate_ethical_anchor(request.prompt, response)
         if ethical_result.refusal_type == RefusalType.HARD:
@@ -195,6 +225,7 @@ def ask(request: AskRequest):
                 "ethical_anchor_hard_refusal",
                 usage=usage_summary, total_latency_ms=total_latency,
                 model_stats=model_stats, mode=mode, domain=domain,
+                sovereign_layer=sovereign_result,
                 ethical_anchor={
                     "pillar":      ethical_result.pillar_triggered,
                     "explanation": ethical_result.hard_refusal_reason
@@ -209,24 +240,26 @@ def ask(request: AskRequest):
             hard_refusal_reason=None
         )
 
-    # Step 8: Confidence Engine — now receives domain for accurate scoring
+    # ── Step 8: Confidence Engine ─────────────────────────────────────────────
     confidence = evaluate_confidence(response, request.prompt, domain)
 
-    # Apply ethical penalty
     if ethical_result and ethical_result.penalty_points > 0:
         confidence["score"] = max(0, confidence["score"] - ethical_result.penalty_points)
         confidence["ethical_penalty_applied"] = ethical_result.penalty_points
 
-    # Apply contradiction medium penalty (non-critical)
     if contradiction_penalty > 0 and not contradiction.get("contradiction"):
         confidence["score"] = max(0, confidence["score"] - contradiction_penalty)
         confidence["contradiction_penalty_applied"] = contradiction_penalty
 
-    # Step 9: Reflective Loop — now adversarial and domain-aware
-    if confidence["score"] < conf_threshold:
-        revised = reflective_review(response, request.prompt, domain)
+    # ── Step 9: Reflective Loop ───────────────────────────────────────────────
+    # Skipped in sovereign mode — sovereign layer is the authority instead
+    if confidence["score"] < conf_threshold and mode != "sovereign":
+        loop = asyncio.get_running_loop()
+        revised = await loop.run_in_executor(
+            None,
+            functools.partial(reflective_review, response, request.prompt, domain)
+        )
 
-        # Reflection returned a refusal signal
         if is_reflection_refusal(revised):
             reason = extract_refusal_reason(revised)
             log_decision(request.prompt, response, 0,
@@ -236,7 +269,8 @@ def ask(request: AskRequest):
                 "reflection_refusal",
                 usage=usage_summary, total_latency_ms=total_latency,
                 model_stats=model_stats, mode=mode, domain=domain,
-                reflection_reason=reason
+                reflection_reason=reason,
+                sovereign_layer=sovereign_result
             )
 
         response   = revised
@@ -250,10 +284,11 @@ def ask(request: AskRequest):
                 "low_confidence_after_reflection",
                 usage=usage_summary, total_latency_ms=total_latency,
                 model_stats=model_stats, mode=mode, domain=domain,
-                confidence=confidence
+                confidence=confidence,
+                sovereign_layer=sovereign_result
             )
 
-    # Step 10: Meta-Arbitration Engine
+    # ── Step 10: Meta-Arbitration Engine ──────────────────────────────────────
     meta_result = run_meta_arbitration(
         prompt=request.prompt,
         primary_response=response,
@@ -274,7 +309,7 @@ def ask(request: AskRequest):
         }
     )
 
-    # Step 11: Final decision
+    # ── Step 11: Final decision ───────────────────────────────────────────────
     if meta_result.verdict == FinalVerdict.SILENT:
         log_decision(request.prompt, response, meta_result.trust_score,
                      f"silent_state — meta_arbitration:{meta_result.primary_refusal_reason} (domain:{domain})")
@@ -285,7 +320,8 @@ def ask(request: AskRequest):
             model_stats=model_stats, mode=mode, domain=domain,
             delivery_confidence=meta_result.delivery_confidence,
             refusal_chain=meta_result.refusal_chain,
-            explanation=meta_result.explanation
+            explanation=meta_result.explanation,
+            sovereign_layer=sovereign_result
         )
 
     log_decision(request.prompt, response, meta_result.trust_score,
@@ -398,8 +434,7 @@ def reset_stats():
 def benchmark_latest():
     files = sorted(glob.glob("tests/benchmark_results/benchmark_*.json"))
     if not files:
-        raise HTTPException(status_code=404,
-                            detail="No benchmark results found.")
+        raise HTTPException(status_code=404, detail="No benchmark results found.")
     with open(files[-1], "r") as f:
         return json.load(f)
 
@@ -407,3 +442,7 @@ def benchmark_latest():
 @app.get("/tests/benchmark_suite.json")
 def serve_benchmark_suite():
     return FileResponse("tests/benchmark_suite.json", media_type="application/json")
+
+
+# ── Required import for reflective loop executor call ─────────────────────────
+import functools

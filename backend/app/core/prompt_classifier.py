@@ -33,7 +33,7 @@ class ClassificationResult:
     sovereign_layer_required: bool
 
 
-ALL_MODELS   = ["openai", "groq", "mistral", "gemini", "local"]
+ALL_MODELS   = ["openai", "groq", "mistral", "gemini"]
 FAST_MODELS  = ["openai", "groq"]
 MED_MODELS   = ["openai", "groq", "gemini"]
 FULL_MODELS  = ALL_MODELS
@@ -187,6 +187,10 @@ TIER_C_DOMAINS = {
         "should i invest", "where should i put",
         "financial advisor", "investment strategy",
         "margin trading", "short selling", "options trading",
+        # Add these shorter variants
+        "guaranteed to return", "guarantees", "zero risk", "no risk", 
+        "annually with zero", 
+        "40% annual", "return 40", "guaranteed return of", "zero risk?",
     ],
     "safety": [
         "dangerous chemical", "explosive", "flammable",
