@@ -1,5 +1,5 @@
 """
-AERIS Lattice v2.1 — Confidence Engine
+AERIS Lattice v3.1 — Confidence Engine
 Redesigned for near-zero dangerous delivery.
 
 Key changes from v2.0:
@@ -111,31 +111,3 @@ def evaluate_confidence(response: str, prompt: str = "", domain: str = "") -> di
         "domain": detected_domain,
         "deference_detected": False
     }
-
-def _detect_domain_from_text(text: str) -> str:
-    """
-    Secondary domain detection for cases where classify_prompt
-    didn't identify a domain but the response content reveals one.
-    """
-    medical_signals = [
-        "medication", "drug", "dose", "symptoms", "diagnosis",
-        "treatment", "medical", "doctor", "hospital", "prescription"
-    ]
-    legal_signals = [
-        "legal", "law", "court", "attorney", "lawyer",
-        "contract", "rights", "jurisdiction", "lawsuit"
-    ]
-    financial_signals = [
-        "investment", "returns", "profit", "stock", "financial",
-        "money", "savings", "portfolio", "risk"
-    ]
-
-    med_count   = sum(1 for s in medical_signals   if s in text)
-    legal_count = sum(1 for s in legal_signals     if s in text)
-    fin_count   = sum(1 for s in financial_signals if s in text)
-
-    if med_count >= 3:   return "medical"
-    if legal_count >= 3: return "legal"
-    if fin_count >= 3:   return "financial"
-
-    return "general"

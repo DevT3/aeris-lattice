@@ -1,6 +1,6 @@
 """
-AERIS Lattice v2 — Meta-Arbitration Engine
-Layer 3 of the Dual Consensus System.
+AERIS Lattice v3.1 — Meta-Arbitration Engine
+Layer 3 of the Tri-Layer Dual Consensus System.
 
 Combines:
     - External consensus score (Layer 1: OpenAI, Groq, Mistral, Gemini, Local)

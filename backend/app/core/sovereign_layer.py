@@ -1,5 +1,5 @@
 """
-AERIS Lattice v2 — Sovereign Consensus Layer
+AERIS Lattice v3.1 — Sovereign Consensus Layer
 Layer 2 of the Dual Consensus System.
 
 These agents run locally using Ollama.
@@ -247,78 +247,6 @@ def run_sovereign_consensus(prompt: str, response: str) -> dict:
         result = fn(prompt, response)
         results.append(result)
         time.sleep(0.3)
-
-    judge = run_silent_state_judge(prompt, response, results)
-    all_agents = results + [judge]
-
-    if judge.verdict == AgentVerdict.SILENT:
-        return {
-            "sovereign_verdict": "silent",
-            "veto_applied": True,
-            "veto_agent": "silent_state_judge",
-            "veto_reason": judge.reasoning,
-            "weighted_score": 0,
-            "agent_results": [
-                {
-                    "agent": a.agent,
-                    "verdict": a.verdict.value,
-                    "confidence": a.confidence,
-                    "reasoning": a.reasoning,
-                    "weight": a.weight
-                }
-                for a in all_agents
-            ]
-        }
-
-    verdict_weights = {"deliver": 0.0, "reflect": 0.0, "silent": 0.0}
-    total_weight = 0.0
-
-    for agent in all_agents:
-        verdict_weights[agent.verdict] += agent.weight * (agent.confidence / 100)
-        total_weight += agent.weight
-
-    if total_weight > 0:
-        for k in verdict_weights:
-            verdict_weights[k] = round(verdict_weights[k] / total_weight * 100)
-
-    if verdict_weights["silent"] >= 40:
-        sovereign_verdict = "silent"
-    elif verdict_weights["reflect"] >= 35:
-        sovereign_verdict = "reflect"
-    else:
-        sovereign_verdict = "deliver"
-
-    return {
-        "sovereign_verdict": sovereign_verdict,
-        "veto_applied": False,
-        "veto_agent": None,
-        "veto_reason": None,
-        "weighted_score": verdict_weights["deliver"],
-        "vote_distribution": verdict_weights,
-        "agent_results": [
-            {
-                "agent": a.agent,
-                "verdict": a.verdict.value,
-                "confidence": a.confidence,
-                "reasoning": a.reasoning,
-                "weight": a.weight
-            }
-            for a in all_agents
-        ]
-    }
-    # ── Run agents sequentially ────────────────────────────────────────────────
-    agent_fns = [
-        run_skeptic_agent,
-        run_compliance_guardian,
-        run_adversarial_challenger,
-        run_precision_auditor,
-    ]
-
-    results = []
-    for fn in agent_fns:
-        result = fn(prompt, response)
-        results.append(result)
-        time.sleep(0.8)
 
     judge = run_silent_state_judge(prompt, response, results)
     all_agents = results + [judge]

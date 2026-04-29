@@ -1,5 +1,5 @@
 """
-AERIS Lattice v3.0 — Main Application
+AERIS Lattice v3.1 — Main Application
 Async parallel orchestration — sequential model calls replaced with
 asyncio.gather() for true parallel execution.
 
@@ -45,7 +45,7 @@ from backend.app.core.sovereign_layer import run_sovereign_consensus
 from backend.app.core.meta_arbitration import run_meta_arbitration, FinalVerdict
 
 app = FastAPI(
-    title="AERIS Lattice v3.0",
+    title="AERIS Lattice v3.1",
     description="Dual Consensus reliability architecture — async parallel orchestration"
 )
 
@@ -88,7 +88,7 @@ def silent_response(
 @app.get("/")
 def root():
     return {
-        "status":  "AERIS Lattice v3.0 Online",
+        "status":  "AERIS Lattice v3.1 Online",
         "message": "Dual Consensus — Async parallel orchestration active",
         "version": "3.0.0"
     }

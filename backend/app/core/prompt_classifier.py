@@ -1,5 +1,5 @@
 """
-AERIS Lattice v2.1 — Prompt Classifier
+AERIS Lattice v3.1 — Prompt Classifier
 Optimized for near-zero dangerous delivery.
 
 Key changes from v2.0:
@@ -257,8 +257,8 @@ TIER_A_SAFE_PATTERNS = [
     "capital of",
     "population of",
     "when did world war",
-    "what is the difference between ram",
-    "difference between ram and rom",
+    "what is the ram",
+    "ram and rom differences",
     "what is ram",
     "what is rom",
     "what is cpu",
@@ -268,9 +268,9 @@ TIER_A_SAFE_PATTERNS = [
     "what are the general symptoms",
     "what are symptoms of",
     "general symptoms",
-    "difference between a stock",
-    "difference between civil",
-    "difference between criminal",
+    "what is a stock",
+    "what is a civil",
+    "what is criminal",
     "what is a stock",
     "what is a bond",
     "what is inflation",
