@@ -4,14 +4,14 @@
 
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.136+-009688.svg)](https://fastapi.tiangolo.com/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![Benchmark](https://img.shields.io/badge/benchmark-32%2F32-brightgreen.svg)]()
 [![Reliability](https://img.shields.io/badge/weighted_reliability-100%25-brightgreen.svg)]()
 [![Dangerous Delivery](https://img.shields.io/badge/dangerous_delivery-0%25-brightgreen.svg)]()
 
-AERIS Lattice is a production-grade middleware layer that intercepts LLM output before it reaches the user and validates it across a dual-consensus pipeline. If reliability falls below threshold at any validation layer — AERIS refuses to deliver.
+AERIS Lattice is a production-grade middleware layer that sits between your users and any LLM. Every response passes through an 11-step, 3-layer validation pipeline before it reaches the user. If reliability falls below threshold at any step — AERIS refuses to deliver.
 
-**Benchmark results (v2.9):** 32/32 prompts · 100% weighted reliability · 0% dangerous delivery · 100% safe refusal rate on high-risk domains.
+**Benchmark (v3.1):** 32/32 prompts · 100% weighted reliability · 0% dangerous delivery · 100% safe refusal rate on high-risk domains.
 
 **The core premise:** in high-stakes domains, a structured refusal is safer than a confident wrong answer.
 
@@ -32,67 +32,99 @@ Current mitigations — prompt engineering, fine-tuning, RLHF — operate at tra
 
 ---
 
-## Architecture — Dual Consensus System
+## Architecture — Tri-Layer Dual Consensus System
 
-AERIS v2 implements a three-layer validation architecture:
+AERIS v3.1 implements an 11-step validation pipeline organized across 3 consensus layers:
 
 ```
 User Prompt
     ↓
-┌──────────────────────────────────────────────────────────────┐
-│  Step 1 — Prompt Classifier                                  │
-│  Risk tier: A (safe) · B (medium) · C (high) · D (adversarial)│
-│  Domain: medical · legal · financial · safety · general      │
-│  Routes to correct model set and threshold configuration     │
-└──────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│  LAYER 1 — External Consensus                                        │
+│                                                                      │
+│  Step 1: Prompt Classifier                                           │
+│    Risk tier: A (safe) · B (medium) · C (high) · D (adversarial)    │
+│    Domain: medical · legal · financial · safety · general            │
+│                                                                      │
+│  Step 2: Tiered Model Routing                                        │
+│    Tier A: OpenAI + Groq                    (2 models, fast path)    │
+│    Tier B: OpenAI + Groq + Gemini           (3 models)              │
+│    Tier C/D: All 4 cloud models             (full consensus)         │
+│                                                                      │
+│  Step 3: Parallel Model Queries             (asyncio.gather)         │
+│    OpenAI GPT-4o-mini · Groq Llama 3.3                              │
+│    Mistral Small · Gemini 2.5 Flash                                  │
+│    Per-model timeout: 12s · partial consensus on timeout             │
+│                                                                      │
+│  Step 4: External Consensus Engine                                   │
+│    Inter-model agreement scoring · primary response selection        │
+│    consensus_score < 40 → Silent State                               │
+│                                                                      │
+│  Step 5: Contradiction Lattice                                       │
+│    Pattern-based absolute claim detection (3 severity levels)        │
+│    critical severity → Silent State                                  │
+│    (bypassed in sovereign mode)                                      │
+└──────────────────────────────────────────────────────────────────────┘
     ↓
-┌──────────────────────────────────────────────────────────────┐
-│  Layer 1 — External Consensus                                │
-│  Tier A: OpenAI + Groq (fast path, 2 models)                 │
-│  Tier B: OpenAI + Groq + Gemini (3 models)                   │
-│  Tier C/D: All 4 cloud models (full consensus)               │
-│  Semantic similarity scoring · Contradiction detection       │
-└──────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│  LAYER 2 — Sovereign Consensus (Tier C/D or sovereign mode)          │
+│                                                                      │
+│  Step 6: Sovereign Layer — 5 local Llama 3.2 agents via Ollama      │
+│    Skeptic Agent            weight: 1.0                              │
+│    Compliance Guardian      weight: 1.5                              │
+│    Adversarial Challenger   weight: 1.2                              │
+│    Precision Auditor        weight: 1.0                              │
+│    Silent State Judge       weight: 2.0   ← VETO AUTHORITY          │
+│    Judge veto → immediate Silent State                               │
+│                                                                      │
+│  Step 7: Ethical Anchor (Tier C/D)                                   │
+│    Harm Prevention · Human Authority                                 │
+│    Irreversibility · Manipulation Boundary                           │
+│    HARD refusal → Silent State · WEIGHTED → confidence penalty       │
+└──────────────────────────────────────────────────────────────────────┘
     ↓
-┌──────────────────────────────────────────────────────────────┐
-│  Ethical Anchor (Tier C/D)                                   │
-│  Harm Prevention · Human Authority · Irreversibility         │
-│  Manipulation Boundary · Hard veto or weighted penalty       │
-└──────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│  LAYER 3 — Meta-Arbitration                                          │
+│                                                                      │
+│  Step 8: Confidence Engine                                           │
+│    Domain-aware scoring · trusts classifier domain                   │
+│    Ethical + contradiction penalties applied                         │
+│                                                                      │
+│  Step 9: Reflective Loop                                             │
+│    GPT-4o-mini adversarial challenge before delivery                 │
+│    Domain-aware challenge templates                                  │
+│    Refusal signal → Silent State · (skipped in sovereign mode)       │
+│                                                                      │
+│  Step 10: Meta-Arbitration Engine                                    │
+│    Composite trust score 0–100                                       │
+│    External 35% + Sovereign 35% + Confidence 20% + Contradiction 10%│
+│    Domain-specific delivery thresholds                               │
+│                                                                      │
+│  Step 11: Final Decision                                             │
+│    Trust score ≥ domain threshold → Delivery                         │
+│    Trust score < domain threshold → Silent State + audit log         │
+└──────────────────────────────────────────────────────────────────────┘
     ↓
-┌──────────────────────────────────────────────────────────────┐
-│  Layer 2 — Sovereign Consensus (Tier C/D)                    │
-│  5 independent local agents running on Ollama (Llama 3.2)    │
-│  Skeptic Agent          weight: 1.0                          │
-│  Compliance Guardian    weight: 1.5                          │
-│  Adversarial Challenger weight: 1.2                          │
-│  Precision Auditor      weight: 1.0                          │
-│  Silent State Judge     weight: 2.0  ← VETO AUTHORITY        │
-└──────────────────────────────────────────────────────────────┘
-    ↓
-┌──────────────────────────────────────────────────────────────┐
-│  Confidence Engine + Reflective Loop                         │
-│  Domain-aware thresholds · Adversarial challenge auditing    │
-└──────────────────────────────────────────────────────────────┘
-    ↓
-┌──────────────────────────────────────────────────────────────┐
-│  Layer 3 — Meta-Arbitration Engine                           │
-│  Composite trust score (0–100)                               │
-│  External 35% + Sovereign 35% + Confidence 20% + Contradiction 10%│
-│  Domain-specific delivery thresholds                         │
-│  Explainable refusal chain                                   │
-└──────────────────────────────────────────────────────────────┘
-    ↓
-  Silent State (structured refusal + audit log)
+  Silent State — structured refusal + explainable refusal chain
   or
-  Delivery (trust score + confidence + explanation)
+  Delivery — response + trust score + full validation metadata
 ```
 
 ---
 
-## Benchmark results
+## Validation modes
 
-Tested against a 32-prompt adversarial suite across 4 risk tiers (v2.9):
+Three modes available per request:
+
+| Mode | Models | Sovereign | Use case |
+|---|---|---|---|
+| **Optimized** | Tiered (2–4) | Tier C/D only | Default — cost and latency efficient |
+| **Full Consensus** | All 4 cloud | Tier C/D only | Maximum external validation |
+| **Full + Sovereign** | All 4 cloud | Always forced | Audit, compliance review, investor demos |
+
+---
+
+## Benchmark results (v3.1)
 
 | Metric | Result | Target |
 |---|---|---|
@@ -109,20 +141,14 @@ Tested against a 32-prompt adversarial suite across 4 risk tiers (v2.9):
 | Tier C — High Risk | Medical advice, legal counsel, financial guidance | 10/10 |
 | Tier D — Adversarial | Jailbreaks, false certainty, social engineering | 10/10 |
 
----
+Benchmark progression:
 
-## Validation layers
-
-| Layer | Trigger | Action |
-|---|---|---|
-| Prompt Classifier | Risk tier + domain detection | Routes to correct pipeline |
-| External Consensus | Model agreement < 60% | Silent state |
-| Ethical Anchor | Harm, manipulation, irreversibility detected | Hard veto or penalty |
-| Contradiction Lattice | Absolute certainty claims | Silent state |
-| Sovereign Layer | Judge veto or weighted silent majority | Silent state |
-| Confidence Engine | High-risk domain or uncertainty language | Score penalty |
-| Reflective Loop | Confidence < threshold after auditing | Silent state |
-| Meta-Arbitration | Trust score < domain threshold | Silent state |
+| Version | Score | Dangerous Delivery | Weighted Score |
+|---|---|---|---|
+| v1.0 | 27/32 | 10% | 84.7% |
+| v2.3 | 29/32 | 0% | 95.2% |
+| v2.9 | 32/32 | 0% | 100% |
+| **v3.1** | **32/32** | **0%** | **100%** |
 
 ---
 
@@ -132,34 +158,34 @@ Tested against a 32-prompt adversarial suite across 4 risk tiers (v2.9):
 aeris-lattice/
 ├── backend/
 │   └── app/
-│       ├── main.py                       # FastAPI application, pipeline orchestration
+│       ├── main.py                       # FastAPI app, async pipeline orchestration
 │       ├── config.py                     # Environment config, threshold constants
 │       ├── core/
 │       │   ├── prompt_classifier.py      # Risk tier and domain classification
 │       │   ├── consensus_engine.py       # Multi-model agreement scoring
 │       │   ├── confidence_engine.py      # Domain-aware confidence scoring
 │       │   ├── contradiction_lattice.py  # Pattern-based absolute claim detection
-│       │   ├── reflective_loop.py        # Adversarial challenge re-evaluation
+│       │   ├── reflective_loop.py        # Adversarial GPT-4o-mini challenge
 │       │   ├── silent_state.py           # Structured refusal response
-│       │   ├── ethical_anchor.py         # Outcome-based harm evaluation
+│       │   ├── ethical_anchor.py         # 4-pillar harm evaluation
 │       │   ├── sovereign_layer.py        # Local agent consensus (Ollama)
-│       │   ├── meta_arbitration.py       # Final trust score and delivery decision
+│       │   ├── meta_arbitration.py       # Composite trust score + final decision
 │       │   └── logger.py                # Append-only decision audit logging
 │       ├── services/
-│       │   └── llm_service.py           # OpenAI, Groq, Mistral, Gemini clients
+│       │   └── llm_service.py           # Async parallel model clients
 │       ├── models/
 │       │   └── request_models.py        # Pydantic request schemas
 │       └── static/
-│           ├── index.html               # Visual demo interface
+│           ├── index.html               # Visual demo — validate + benchmark tabs
 │           └── dashboard.html           # Reliability dashboard
 ├── docs/
 │   ├── vision.md                        # Problem statement, architecture decisions
-│   ├── V2_ARCHITECTURE.md              # Dual consensus architecture reference
+│   ├── V3_ARCHITECTURE.md              # Full pipeline reference, thresholds
 │   └── CONTRIBUTING.md                 # Contribution guidelines
 ├── tests/
 │   ├── benchmark_suite.json             # 32-prompt adversarial test suite
 │   ├── run_benchmark.py                 # Benchmark runner with regression detection
-│   └── benchmark_results/              # Version-tagged benchmark results
+│   └── benchmark_results/              # Version-tagged benchmark JSON files
 ├── .env.example                         # Environment configuration template
 ├── requirements.txt
 ├── roadmap.md
@@ -191,7 +217,7 @@ cp .env.example .env
 # Edit .env with your API keys
 ```
 
-Pull the local sovereign layer model:
+Pull the sovereign layer model:
 
 ```bash
 ollama pull llama3.2
@@ -201,7 +227,7 @@ ollama pull llama3.2
 
 ```bash
 export PYTHONPATH=$(pwd)
-uvicorn backend.app.main:app --reload
+python -m uvicorn backend.app.main:app --reload
 ```
 
 | Endpoint | Method | Description |
@@ -223,14 +249,15 @@ uvicorn backend.app.main:app --reload
 ```bash
 curl -X POST http://127.0.0.1:8000/ask \
   -H "Content-Type: application/json" \
-  -d '{"prompt": "Can I stop taking antibiotics early if I feel better?", "mode": "optimized"}'
+  -d '{"prompt": "Can I stop taking antibiotics early?", "mode": "optimized"}'
 ```
 
 **mode options:**
-- `"optimized"` — tiered model selection (default, lower cost and latency)
-- `"full"` — all 4 cloud models regardless of tier
+- `"optimized"` — tiered routing, default
+- `"full"` — all 4 cloud models
+- `"sovereign"` — all 4 cloud models + forced sovereign agents on any tier
 
-**Response — silent state (high-risk):**
+**Silent state response:**
 
 ```json
 {
@@ -241,37 +268,28 @@ curl -X POST http://127.0.0.1:8000/ask \
   "trust_score": 0,
   "refusal_reason": "low_confidence_after_reflection",
   "refusal_chain": ["domain_confidence_penalty", "low_confidence_after_reflection"],
-  "consensus": {
-    "consensus_score": 70,
-    "agreement": "partial",
-    "models_responded": ["openai", "groq", "mistral", "gemini"]
-  }
+  "sovereign_layer": { "sovereign_verdict": "reflect", "veto_applied": false, "agent_results": [...] },
+  "usage": { "total_tokens": 861, "avg_latency_ms": 2668 },
+  "mode": "optimized"
 }
 ```
 
-**Response — delivered (safe):**
+**Delivered response:**
 
 ```json
 {
-  "final_response": "The capital of France is Paris...",
+  "final_response": "The capital of France is Paris.",
   "trust_score": 98,
   "delivery_confidence": "high",
   "tier": "tier_a_safe",
   "domain": "general",
-  "confidence": { "score": 92, "domain": "general" },
+  "mode": "optimized",
   "consensus": { "consensus_score": 100, "agreement": "high" },
-  "usage": {
-    "total_tokens": 117,
-    "total_tokens_in": 102,
-    "total_tokens_out": 15,
-    "avg_latency_ms": 1292
-  }
+  "usage": { "total_tokens": 117, "avg_latency_ms": 682, "partial_consensus": false }
 }
 ```
 
 ### Enterprise arbiter
-
-Plug in any model endpoint as an additional voting arbiter:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/ask \
@@ -287,40 +305,32 @@ curl -X POST http://127.0.0.1:8000/ask \
 
 ## Benchmark suite
 
-Run the full adversarial benchmark:
-
 ```bash
-# Run and save results
-python tests/run_benchmark.py --version v2.9
-
-# Compare two versions
-python tests/run_benchmark.py --compare v2.8 v2.9
+python tests/run_benchmark.py --version v3.1
+python tests/run_benchmark.py --compare v2.9 v3.1
 ```
 
-The benchmark includes 32 prompts across 4 tiers with tier-weighted scoring. Dangerous delivery rate is the primary metric — a system that delivers 2% of dangerous prompts is not acceptable regardless of overall accuracy.
+The benchmark includes 32 adversarial prompts across 4 tiers with tier-weighted scoring. Dangerous delivery rate is the primary metric — a system that delivers 2% of dangerous prompts is not acceptable regardless of overall accuracy.
 
 ---
 
-## Token efficiency
+## Human-in-the-loop (roadmap)
 
-Tiered routing reduces cost significantly on mixed production traffic:
+When AERIS triggers a Silent State on a high-risk Tier C/D prompt, the intended enterprise behavior is to escalate to a human reviewer rather than simply returning a refusal. This human-in-the-loop escalation is a core Milestone 3 feature:
 
-| Tier | Models | Token cost vs naive (5 models always) |
-|---|---|---|
-| Tier A — Safe | 2 models | −60% |
-| Tier B — Medium | 3 models | −40% |
-| Tier C — High Risk | 4 models + sovereign | 0% change |
-| Tier D — Adversarial | 4 models + sovereign | 0% change |
+- Webhook fires on every Silent State event with full audit payload
+- Escalation ticket created in connected ITSM system (ServiceNow, Jira, etc.)
+- Human reviewer receives: original prompt, refusal reason, refusal chain, sovereign agent votes, trust score
+- Reviewer can approve delivery, modify response, or confirm suppression
+- Decision logged to tamper-evident audit trail
 
-For typical production traffic (70%+ safe prompts), overall token cost is approximately 50% lower than querying all models on every request.
+For compliance officers: this means AERIS never silently discards a request. Every suppression is logged, explainable, and escalatable. The system does not replace human judgment — it surfaces the cases that require it.
 
 ---
 
 ## Sovereign layer
 
-The sovereign layer runs entirely locally on Ollama with no data sent to external APIs. For enterprise deployments requiring data sovereignty, all Tier C/D validation can be performed without external network calls beyond the initial cloud model queries.
-
-Five agents with independent roles and weighted votes:
+The sovereign layer runs entirely locally on Ollama with no data leaving the machine. For enterprise deployments with data sovereignty requirements, all Tier C/D validation is performed without external calls beyond the initial cloud model queries.
 
 | Agent | Role | Weight |
 |---|---|---|
@@ -334,13 +344,27 @@ A veto from the Silent State Judge immediately suppresses the response regardles
 
 ---
 
+## Token efficiency
+
+Tiered routing reduces cost on mixed production traffic:
+
+| Tier | Models | Cost vs 4-model baseline |
+|---|---|---|
+| Tier A — Safe | 2 cloud | −50% |
+| Tier B — Medium | 3 cloud | −25% |
+| Tier C/D + sovereign | 4 cloud + local | 0% (local is free) |
+
+For typical production traffic (70%+ safe prompts), overall token cost is approximately 40% lower than querying all 4 models on every request. Async parallel execution (v3.0) reduced Tier C/D wall-clock latency by 60–70% compared to sequential calls.
+
+---
+
 ## Design philosophy
 
 Most AI systems are optimized to answer.
 
 AERIS Lattice is optimized to know when not to.
 
-Silence is a valid and deliberate safety mechanism. The cost of a false silence — a user who does not get an answer — is lower than the cost of a dangerous delivery — a user who acts on incorrect medical, legal, or financial information.
+Silence is a valid and deliberate safety mechanism. The cost of a false silence is lower than the cost of a dangerous delivery in a high-stakes domain.
 
 ---
 
@@ -358,7 +382,7 @@ See [roadmap.md](roadmap.md).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Apache 2.0 — see [LICENSE](LICENSE).
 
 ---
 
@@ -366,4 +390,4 @@ MIT — see [LICENSE](LICENSE).
 
 **Tomás Villa**
 Independent Research & Development · Colombia
-[aerislattice.com](https://aerislattice.com) · hello@aerislattice.com
+[aerislattice.com](https://aerislattice.com) · hello@aerislattice.com · [github.com/DevT3/aeris-lattice](https://github.com/DevT3/aeris-lattice)

@@ -8,7 +8,7 @@ Thank you for your interest in AERIS Lattice. This is a research-stage infrastru
 
 **Open an issue before submitting a pull request** for any non-trivial change. This ensures alignment with the project direction and avoids duplicate work. For bug fixes and small corrections, a PR without a prior issue is fine.
 
-If you are considering a significant contribution — a new validation layer, a new arbiter integration, or a change to the benchmark methodology — open an issue first so we can discuss the design before any code is written.
+If you are considering a significant contribution — a new validation layer, a new arbiter integration, a change to the benchmark methodology, or a new validation mode — open an issue first so we can discuss the design before any code is written.
 
 ---
 
@@ -27,7 +27,7 @@ cp .env.example .env
 # Add your API keys to .env
 ```
 
-Install the local sovereign layer model:
+Install the sovereign layer model:
 
 ```bash
 ollama pull llama3.2
@@ -37,7 +37,7 @@ Run the server:
 
 ```bash
 export PYTHONPATH=$(pwd)
-uvicorn backend.app.main:app --reload
+python -m uvicorn backend.app.main:app --reload
 ```
 
 Run the benchmark to confirm your environment is working:
@@ -52,13 +52,15 @@ A passing environment produces 32/32 with 0% dangerous delivery. If you see fail
 
 ## Architecture overview
 
-Before contributing, read these documents:
+Before contributing, read these documents in order:
 
 - `docs/vision.md` — problem statement, design philosophy, non-goals
-- `docs/V2_ARCHITECTURE.md` — full pipeline reference, thresholds, benchmark methodology
-- `README.md` — quickstart, API reference, repository structure
+- `docs/V3_ARCHITECTURE.md` — full 11-step pipeline reference, thresholds, mode behavior
+- `README.md` — quickstart, API reference, validation modes
 
-The most important design principle: **AERIS is biased toward safe refusal over delivery**. Any contribution that increases dangerous delivery rate — even slightly — is not acceptable regardless of other improvements it brings.
+**The most important design principle:** AERIS is biased toward safe refusal over delivery. Any contribution that increases dangerous delivery rate — even slightly — will not be merged regardless of other improvements it brings.
+
+**The second principle:** silent state is not a failure. A contribution that increases false refusal rate above 10% without a corresponding safety gain is also not acceptable.
 
 ---
 
@@ -67,47 +69,56 @@ The most important design principle: **AERIS is biased toward safe refusal over 
 ### High priority
 
 **Semantic consensus scoring**
-Replace keyword-based agreement detection with cosine similarity between model output embeddings. This is the highest-impact reliability improvement remaining in the architecture. See `backend/app/core/consensus_engine.py`.
+Replace keyword-based agreement detection in `consensus_engine.py` with cosine similarity between model output embeddings. This is the highest-impact reliability improvement remaining. The current keyword approach misses semantic agreement between differently-worded responses.
 
 **PostgreSQL decision logging**
-Replace the flat-file `decision_log.txt` with a proper relational store. Schema should preserve all current fields plus support indexed queries by domain, tier, outcome, and timestamp. See `backend/app/core/logger.py`.
+Replace the flat-file `decision_log.txt` with a proper relational store. Schema must preserve all current fields (timestamp, prompt, response excerpt, confidence, status, tier, domain, refusal reason) plus support indexed queries by domain, tier, outcome, and date range. See `backend/app/core/logger.py`.
+
+**Human-in-the-loop escalation API**
+Silent State webhook — when AERIS suppresses a response, POST the full audit payload to a configurable endpoint. Payload should include: prompt, refusal reason, refusal chain, sovereign agent votes, trust score, domain, tier. This is the primary enterprise integration feature. See `roadmap.md` for full specification.
 
 **Pytest test suite**
-No automated test suite exists beyond the benchmark runner. A pytest suite covering all 8 validation layers with mock model responses is a critical gap. Priority: consensus engine, confidence engine, contradiction lattice, ethical anchor.
+No automated test suite exists beyond the benchmark runner. A pytest suite covering all 11 pipeline steps with mock model responses is a critical gap. Priority: consensus engine, confidence engine, contradiction lattice, ethical anchor, sovereign layer (mock Ollama).
 
 **Domain-specific safety profiles via JSON**
-Allow domain thresholds to be configured without code changes. A JSON schema for domain profiles that can be loaded at startup and override defaults in `prompt_classifier.py` and `confidence_engine.py`.
+Allow domain thresholds to be configured without code changes. A JSON schema for domain profiles that can be loaded at startup and override defaults in `prompt_classifier.py`, `confidence_engine.py`, and `meta_arbitration.py`.
 
 ### Medium priority
 
+**Tiered sovereign execution**
+The sovereign layer currently always runs 5 agents regardless of risk level. A configurable agent selection by tier would reduce latency on lower-risk prompts: Tier A: 2 agents (Judge + Compliance Guardian), Tier B: 3 agents, Tier C/D: all 5. Requires changes to `sovereign_layer.py` and a new config parameter.
+
 **Additional LLM arbiter integrations**
-Cohere, Together AI, and Perplexity are candidates. Any new arbiter must follow the existing response structure in `llm_service.py` returning `text`, `tokens_in`, `tokens_out`, `latency_ms`, and `error`.
+Cohere, Together AI, and Perplexity are candidates. Any new arbiter must follow the existing response structure in `llm_service.py` and must be async-compatible, returning: `text`, `tokens_in`, `tokens_out`, `latency_ms`, `error`, `timed_out`.
 
 **Docker Compose setup**
-A `docker-compose.yml` covering the FastAPI app plus a PostgreSQL instance (when logging is migrated) plus Ollama.
+A `docker-compose.yml` covering the FastAPI app, Ollama service, and PostgreSQL (when logging is migrated).
 
 **Deployment guide**
-Step-by-step deployment documentation for Railway, Render, and AWS ECS.
+Step-by-step documentation for Railway, Render, AWS ECS, and GCP Cloud Run.
 
 **Adversarial benchmark expansion**
-The current suite is 32 prompts. Expanding to 100+ prompts with more novel jailbreak patterns, indirect harm vectors, and domain-specific edge cases would improve the benchmark's validity. New prompts must include expected outcome, tier classification, and rationale.
+The current suite is 32 prompts. Expanding to 100+ with more novel jailbreak patterns, indirect harm vectors, and domain-specific edge cases improves benchmark validity. New prompts must include: expected outcome, tier classification, domain, and rationale for why this should pass or fail.
 
 ### Research contributions
 
 **Neural network domain classifier**
-A small fine-tuned classifier replacing keyword matching in `prompt_classifier.py`. Training data available from the decision log.
+A small fine-tuned classifier replacing keyword matching in `prompt_classifier.py`. Training data is available from the decision log. The architecture should maintain a hardcoded keyword fallback for cases where the classifier is uncertain — defense in depth at the classification layer.
 
 **Response compression pipeline**
 Summarize model outputs before consensus scoring to reduce token cost on long responses without losing the reliability signal.
 
+**TruthfulQA and HallucinationBench integration**
+Add published hallucination benchmark prompts to the test suite. This provides externally validated ground truth rather than self-constructed benchmarks, and strengthens research credibility.
+
 **Confidence calibration**
-Compare confidence scores against human expert ground truth labels in medical, legal, and financial domains. We are seeking domain expert partnerships for this work.
+Compare AERIS confidence scores against human expert ground truth labels in medical, legal, and financial domains. We are seeking domain expert partnerships for this work.
 
 ---
 
 ## Benchmark discipline
 
-Every code change that touches the validation pipeline must be benchmarked:
+Every code change that touches the validation pipeline must be benchmarked before and after:
 
 ```bash
 # Before your change
@@ -122,7 +133,7 @@ python tests/run_benchmark.py --compare pre-change post-change
 
 A contribution that causes any regression in dangerous delivery rate will not be merged. A contribution that improves weighted reliability score without increasing dangerous delivery rate is always welcome.
 
-Include benchmark comparison output in your pull request description.
+**Include benchmark comparison output in your pull request description.** PRs that touch pipeline files without benchmark output will be asked to add it before review.
 
 ---
 
@@ -132,15 +143,15 @@ This project uses [Conventional Commits](https://www.conventionalcommits.org/):
 
 ```
 feat: add embedding-based consensus scoring to consensus engine
-fix: correct domain re-detection bug in confidence engine
-docs: update V2_ARCHITECTURE with confidence threshold table
-refactor: extract sovereign agent polling into separate utility
+fix: sovereign verdict enum serialization — use verdict.value not verdict
+docs: update V3_ARCHITECTURE with async parallel pipeline reference
+refactor: extract tiered sovereign agent selection into config
 test: add pytest coverage for contradiction lattice severity levels
-bench: v2.9 benchmark results — 32/32 100 percent weighted reliability
-chore: update requirements.txt with google-genai migration
+bench: v3.1 benchmark results 32/32 100 percent weighted reliability
+chore: update requirements.txt async client dependencies
 ```
 
-Do not use generic messages like `fix bug` or `update code`. Every commit message should explain what changed and why in one line.
+Do not use generic messages like `fix bug` or `update code`. Every commit should explain what changed and why in one line.
 
 ---
 
@@ -148,13 +159,11 @@ Do not use generic messages like `fix bug` or `update code`. Every commit messag
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feat/your-feature-name`
-3. Make your changes with appropriate docstrings and type hints
+3. Make your changes with docstrings and type hints on all functions
 4. Run the benchmark and include results in your PR description
 5. Commit using conventional commit format
 6. Push and open a PR against `main`
-7. Describe what changed, why, and what the benchmark impact is
-
-PRs without benchmark comparison output for pipeline changes will be asked to add it before review.
+7. Describe: what changed, why, and what the benchmark impact is
 
 ---
 
@@ -164,19 +173,25 @@ PRs without benchmark comparison output for pipeline changes will be asked to ad
 - PEP 8 compliance
 - Type hints required on all function signatures
 - Docstrings required on all public functions and classes
-- No hardcoded API keys, URLs, or secrets — use environment variables
-- No `print()` statements in production code — use the logger
+- No hardcoded API keys, model names, or secrets — use environment variables and constants
+- No `print()` in production code — use `log_decision()` or Python logging
+
+**Async**
+- New model integrations must be async — either native async client or `loop.run_in_executor()` wrapper
+- Use `asyncio.get_running_loop()` not `asyncio.get_event_loop()` in async contexts
+- All enum values serialized as `.value` (string) before including in API responses
 
 **Architecture**
-- New validation layers must be added to the pipeline in `main.py` and documented in `docs/V2_ARCHITECTURE.md`
+- New validation layers added to the pipeline in `main.py` and documented in `docs/V3_ARCHITECTURE.md`
 - New arbiter integrations must follow the `_model_result()` return structure in `llm_service.py`
 - Threshold changes must be benchmarked and justified — not guessed
+- `sovereign_result` must be initialized to `None` before Step 4 — all early exit returns must include `sovereign_layer=sovereign_result`
 
-**Sensitive areas**
-The following files require the highest scrutiny and clearest justification for any change:
+**Sensitive files — highest scrutiny required**
+The following files require the clearest justification for any change:
 - `prompt_classifier.py` — keyword changes directly affect tier routing and safety
 - `confidence_engine.py` — threshold changes directly affect delivery rate
-- `meta_arbitration.py` — weight changes affect the final trust score calculation
+- `meta_arbitration.py` — weight changes affect the composite trust score
 - `sovereign_layer.py` — agent prompt changes affect local validation behavior
 - `ethical_anchor.py` — pillar logic changes affect hard refusal triggers
 

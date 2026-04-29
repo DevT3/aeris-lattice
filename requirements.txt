@@ -1,8 +1,8 @@
-# AERIS Lattice v2.9 — Python Dependencies
+# AERIS Lattice v3.1 — Python Dependencies
 # Generated: April 2026
 # Python: 3.11+
 #
-# Install: pip install -r requirements.txt --break-system-packages
+# Install: pip install -r requirements.txt
 # ─────────────────────────────────────────────────────────────────────
 
 # ── Web framework ─────────────────────────────────────────────────────
@@ -17,13 +17,16 @@ pydantic_core==2.46.3
 annotated-types==0.7.0
 typing_extensions==4.15.0
 
-# ── LLM clients ───────────────────────────────────────────────────────
+# ── LLM clients — async ───────────────────────────────────────────────
+# OpenAI and Groq: native async clients (AsyncOpenAI, AsyncGroq)
+# Mistral and Gemini: sync clients wrapped in run_in_executor
 openai==2.32.0
 groq==1.2.0
 mistralai==2.4.2
 
 # Google Gemini — migrated from google-generativeai to google-genai
-# google-generativeai is deprecated — do not use
+# IMPORTANT: google-generativeai is deprecated — do not use
+# Use: from google import genai as google_genai
 google-genai==1.73.1
 google-api-core==2.25.2
 google-api-python-client==2.194.0
