@@ -1,5 +1,5 @@
 """
-AERIS Lattice v2.1 — Reflective Loop
+AERIS Lattice v3.1 — Reflective Loop
 Complete redesign from cosmetic prefix to adversarial challenge.
 
 Key changes from v2.0:

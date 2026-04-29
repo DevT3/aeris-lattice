@@ -1,5 +1,5 @@
 """
-AERIS Lattice v2.1 — Contradiction Lattice
+AERIS Lattice v3.1 — Contradiction Lattice
 Expanded from simple keyword matching to pattern-based detection.
 
 Key changes from v2.0:

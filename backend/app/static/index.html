@@ -1272,6 +1272,8 @@ async function resetStats() {
     document.getElementById('statDelivered').textContent = '0';
     document.getElementById('statSilent').textContent    = '0';
     document.getElementById('statRate').textContent      = '0%';
+    document.getElementById('result').innerHTML = '';
+    document.getElementById('result').style.display = 'none';
   } catch { alert('Could not reset stats. Check server is running.'); }
 }
 
