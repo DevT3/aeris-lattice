@@ -76,12 +76,12 @@ dmypy.json
 Thumbs.db
 desktop.ini
 
-# ── AERIS Lattice — runtime files ────────────────────────────────────
-# Decision audit log — contains user prompts, never commit
+# ── AERIS Lattice — runtime files ─────────────────────────────────────
+# Decision audit log — contains user prompts, NEVER commit
 decision_log.txt
 
-# Benchmark results are committed intentionally for regression tracking
-# tests/benchmark_results/ — DO NOT add this
+# Benchmark results ARE committed intentionally for regression tracking
+# DO NOT add tests/benchmark_results/ to this file
 
 # ── Jupyter ───────────────────────────────────────────────────────────
 .ipynb_checkpoints
