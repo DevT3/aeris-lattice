@@ -8,29 +8,29 @@
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg:         #fafafa;
-      --surface:    #ffffff;
-      --surface2:   #f5f5f5;
-      --border:     rgba(0,0,0,0.08);
-      --border2:    rgba(0,0,0,0.14);
-      --text:       #0a0a0a;
-      --text2:      #525252;
-      --text3:      #a3a3a3;
-      --green:      #16a34a;
-      --green-bg:   #f0fdf4;
-      --green-border:#bbf7d0;
-      --red:        #dc2626;
-      --red-bg:     #fef2f2;
-      --red-border: #fecaca;
-      --amber:      #d97706;
-      --amber-bg:   #fffbeb;
-      --amber-border:#fde68a;
-      --blue:       #2563eb;
-      --blue-bg:    #eff6ff;
-      --blue-border:#bfdbfe;
-      --mono:       'IBM Plex Mono', monospace;
-      --sans:       'IBM Plex Sans', sans-serif;
-    }
+  --bg:         #0a0f1c;
+  --surface:    #111827;
+  --surface2:   #1f2937;
+  --border:     rgba(148,163,184,0.15);
+  --border2:    rgba(148,163,184,0.3);
+  --text:       #f1f5f9;
+  --text2:      #94a3b8;
+  --text3:      #64748b;
+  --green:      #22c55e;
+  --green-bg:   rgba(34,197,94,0.12);
+  --green-border:#166534;
+  --red:        #ef4444;
+  --red-bg:     rgba(239,68,68,0.12);
+  --red-border: #991b1b;
+  --amber:      #f59e0b;
+  --amber-bg:   rgba(245,158,11,0.12);
+  --amber-border:#92400e;
+  --blue:       #3b82f6;
+  --blue-bg:    rgba(59,130,246,0.12);
+  --blue-border:#1e40af;
+  --mono:       'IBM Plex Mono', monospace;
+  --sans:       'IBM Plex Sans', sans-serif;
+}
 
     @media (prefers-color-scheme: dark) {
       :root {
@@ -344,15 +344,12 @@
       .models-grid { grid-template-columns: 1fr; }
     }
 
-    .mode-toggle { display:flex; align-items:center; gap:2px; background:var(--surface2); border:1px solid var(--border); border-radius:5px; padding:2px; }
-    .mode-btn { padding:5px 12px; border-radius:3px; font-family:var(--mono); font-size:10px; font-weight:500; cursor:pointer; border:none; background:transparent; color:var(--text3); letter-spacing:0.04em; transition:all 0.15s; }
+    .mode-toggle { display:flex; align-items:center; gap:2px; background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:3px; }
+    .mode-btn { padding:6px 14px; border-radius:4px; font-family:var(--mono); font-size:11px; font-weight:500; cursor:pointer; border:none; background:transparent; color:var(--text3); transition:all 0.15s; }
     .mode-btn:hover { color:var(--text2); }
     .mode-btn.active { background:var(--surface); color:var(--text); border:1px solid var(--border2); }
     .mode-btn.active.full-mode { color:var(--blue); border-color:var(--blue-border); background:var(--blue-bg); }
-    .mode-btn.active { color:var(--text); border-color:var(--border2); background:var(--surface2); }
-    .mode-btn.active.full-mode { color:var(--blue); border-color:var(--blue-border); background:var(--blue-bg); }
-    .mode-btn.active.sov-mode { color:var(--amber); border-color:var(--amber-border); background:var(--amber-bg); }
-    .mode-btn.sov-mode { color:var(--amber); border-color:var(--amber-border); }
+    .mode-btn.active.sov-mode { color:var(--green); border-color:var(--green); background:rgba(34,197,94,0.15); }
 
     .usage-bar { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:1px; background:var(--border); border:1px solid var(--border); border-radius:6px; overflow:hidden; margin-bottom:16px; }
     .usage-cell { background:var(--surface); padding:10px 14px; }
@@ -402,7 +399,7 @@
   <header class="header">
     <div class="brand">
       <span class="brand-name">AERIS Lattice</span>
-      <span class="brand-version">v2.1 · Dual Consensus</span>
+      <span class="brand-version">v3.1 · Dual Consensus</span>
     </div>
     <div class="header-right">
       <div class="system-status"><div class="status-dot"></div><span>Operational</span></div>
@@ -414,12 +411,12 @@
   </header>
 
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;">
-    <div style="display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:5px;font-size:11px;font-family:var(--mono);font-weight:500;border:1px solid;background:rgba(16,163,127,0.06);border-color:rgba(16,163,127,0.3);color:#10a37f;"><div style="width:5px;height:5px;border-radius:50%;background:#10a37f;"></div>GPT-4o-mini</div>
-    <div style="display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:5px;font-size:11px;font-family:var(--mono);font-weight:500;border:1px solid;background:rgba(245,80,54,0.06);border-color:rgba(245,80,54,0.3);color:#f55036;"><div style="width:5px;height:5px;border-radius:50%;background:#f55036;"></div>Groq Llama 3.3</div>
-    <div style="display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:5px;font-size:11px;font-family:var(--mono);font-weight:500;border:1px solid;background:rgba(250,130,0,0.06);border-color:rgba(250,130,0,0.3);color:#fa8200;"><div style="width:5px;height:5px;border-radius:50%;background:#fa8200;"></div>Mistral Small</div>
-    <div style="display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:5px;font-size:11px;font-family:var(--mono);font-weight:500;border:1px solid;background:rgba(66,133,244,0.06);border-color:rgba(66,133,244,0.3);color:#4285f4;"><div style="width:5px;height:5px;border-radius:50%;background:#4285f4;"></div>Gemini 2.5 Flash</div>
-    <div style="display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:5px;font-size:11px;font-family:var(--mono);font-weight:500;border:1px solid;background:rgba(34,211,122,0.06);border-color:rgba(34,211,122,0.3);color:#16a34a;"><div style="width:5px;height:5px;border-radius:50%;background:#16a34a;"></div>Llama 3.2 · Sovereign Layer</div>
-  </div>
+  <div style="display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:5px;font-size:11px;font-family:var(--mono);font-weight:500;border:1px solid;background:rgba(34,197,94,0.12);border-color:rgba(34,197,94,0.3);color:#22c55e;"><div style="width:5px;height:5px;border-radius:50%;background:#22c55e;"></div>GPT-4o-mini</div>
+  <div style="display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:5px;font-size:11px;font-family:var(--mono);font-weight:500;border:1px solid;background:rgba(245,80,54,0.12);border-color:rgba(245,80,54,0.3);color:#f55036;"><div style="width:5px;height:5px;border-radius:50%;background:#f55036;"></div>Groq Llama 3.3</div>
+  <div style="display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:5px;font-size:11px;font-family:var(--mono);font-weight:500;border:1px solid;background:rgba(250,130,0,0.12);border-color:rgba(250,130,0,0.3);color:#fa8200;"><div style="width:5px;height:5px;border-radius:50%;background:#fa8200;"></div>Mistral Small</div>
+  <div style="display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:5px;font-size:11px;font-family:var(--mono);font-weight:500;border:1px solid;background:rgba(66,133,244,0.12);border-color:rgba(66,133,244,0.3);color:#4285f4;"><div style="width:5px;height:5px;border-radius:50%;background:#4285f4;"></div>Gemini 2.5 Flash</div>
+  <div style="display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:5px;font-size:11px;font-family:var(--mono);font-weight:500;border:1px solid;background:rgba(34,211,122,0.12);border-color:#22c55e;color:#22c55e;"><div style="width:5px;height:5px;border-radius:50%;background:#22c55e;"></div>Llama 3.2 · Sovereign Layer</div>
+</div>
 
   <div class="tabs">
     <button class="tab active" onclick="switchTab('validate')">Validate</button>
@@ -1134,10 +1131,10 @@ let svBadgeCls = 'sv-inactive';
 
 // ── Benchmark ──────────────────────────────────────────────────────────────────
 async function runBenchmark() {
-  const btn      = document.getElementById('benchBtn');
-  const stopBtn  = document.getElementById('stopBenchBtn');
-  const progressEl   = document.getElementById('benchProgress');
-  const progressLog  = document.getElementById('benchProgressLog');
+  const btn         = document.getElementById('benchBtn');
+  const stopBtn     = document.getElementById('stopBenchBtn');
+  const progressEl  = document.getElementById('benchProgress');
+  const progressLog = document.getElementById('benchProgressLog');
   const progressCount = document.getElementById('benchProgressCount');
 
   benchmarkStopped = false;
@@ -1149,11 +1146,14 @@ async function runBenchmark() {
   progressLog.innerHTML = '';
 
   try {
-    const suiteRes = await fetch('/tests/benchmark_suite.json');
-    if (!suiteRes.ok) throw new Error('Could not load benchmark suite. Run from terminal: python tests/run_benchmark.py --version v2.0');
+    // UPDATED: Use the new API endpoint we added to main.py
+    const suiteRes = await fetch('/api/benchmark-suite');
+    if (!suiteRes.ok) throw new Error('Could not load benchmark suite. Run from terminal: python tests/run_benchmark.py --version v4.0');
+
     const text = await suiteRes.text();
     const suite = JSON.parse(text.replace(/\/\/.*/g, ''));
     const prompts = suite.prompts;
+
     const results = [];
     let pass = 0, dangerCount = 0;
 
@@ -1173,19 +1173,37 @@ async function runBenchmark() {
       progressLog.scrollTop = progressLog.scrollHeight;
 
       try {
-        const res = await fetch('/ask', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ prompt: test.prompt }) });
+        const res = await fetch('/ask', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ prompt: test.prompt, mode: "optimized" })
+        });
         const data = await res.json();
+
         const actual = data.status === 'silent_state' ? 'silent_state' : 'delivered';
         const expected = test.expected;
         const passed = expected === 'delivered_or_low_confidence' ? true : actual === expected;
         const isDanger = ['tier_c','tier_d'].includes(test.tier) && expected === 'silent_state' && actual === 'delivered';
+
         if (passed) pass++;
         if (isDanger) dangerCount++;
+
         row.className = 'progress-row-bench';
         row.querySelector('.pstatus').textContent = isDanger ? '⚠ DANGER' : passed ? 'PASS' : 'FAIL';
         row.querySelector('.pstatus').className = 'pstatus ' + (isDanger ? 'danger-cell' : passed ? 'pass-cell' : 'fail-cell');
-        results.push({ id: test.id, tier: test.tier, prompt: test.prompt, expected, actual, passed, is_dangerous_delivery: isDanger, total_tokens: data.usage?.total_tokens || null, latency_ms: data.total_latency_ms || null });
-      } catch {
+
+        results.push({
+          id: test.id,
+          tier: test.tier,
+          prompt: test.prompt,
+          expected,
+          actual,
+          passed,
+          is_dangerous_delivery: isDanger,
+          total_tokens: data.usage?.total_tokens || null,
+          latency_ms: data.total_latency_ms || null
+        });
+      } catch (e) {
         row.querySelector('.pstatus').textContent = 'ERROR';
         row.querySelector('.pstatus').style.color = 'var(--text3)';
         results.push({ id: test.id, tier: test.tier, prompt: test.prompt, expected: test.expected, actual: 'error', passed: false, is_dangerous_delivery: false });
@@ -1259,7 +1277,7 @@ function clearBenchmarkView() {
   });
 }
 
-document.getElementById('prompt').addEventListener('keydown', e => {
+document.getElementById('prompt').addEventListener('keydown', e => {                      
   if (e.key === 'Enter' && e.ctrlKey) submitPrompt();
 });
 
@@ -1267,11 +1285,19 @@ async function resetStats() {
   if (!confirm('Clear all request stats? Benchmark results are preserved.')) return;
   try {
     await fetch('/api/reset-stats', { method: 'POST' });
-    loadStats();
+    await loadStats();                    // force full refresh
+    // force UI to zero
     document.getElementById('statTotal').textContent     = '0';
     document.getElementById('statDelivered').textContent = '0';
     document.getElementById('statSilent').textContent    = '0';
     document.getElementById('statRate').textContent      = '0%';
+    // clear benchmark bars
+    ['A','B','C','D'].forEach(t => {
+      const el = document.getElementById('pb' + t);
+      const st = document.getElementById('pb' + t + 'stat');
+      if (el) el.style.width = '0%';
+      if (st) st.textContent = '—';
+    });
     document.getElementById('result').innerHTML = '';
     document.getElementById('result').style.display = 'none';
   } catch { alert('Could not reset stats. Check server is running.'); }

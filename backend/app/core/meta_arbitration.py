@@ -51,16 +51,16 @@ WEIGHTS = {
 
 # Domain-specific threshold overrides
 DOMAIN_THRESHOLDS = {
-    "medical":      {"deliver": 80, "reflect": 60},
-    "legal":        {"deliver": 78, "reflect": 58},
-    "financial":    {"deliver": 75, "reflect": 55},
-    "safety":       {"deliver": 85, "reflect": 65},
-    "adversarial":  {"deliver": 95, "reflect": 90},  # Near-impossible to pass
-    "general":      {"deliver": 55, "reflect": 40},
-    "tier_a_safe":  {"deliver": 48, "reflect": 35},
-    "general_health":    {"deliver": 52, "reflect": 38},
-    "general_legal":     {"deliver": 52, "reflect": 38},
-    "general_financial": {"deliver": 52, "reflect": 38},
+    "medical":      {"deliver": 92, "reflect": 75},
+    "legal":        {"deliver": 90, "reflect": 72},
+    "financial":    {"deliver": 88, "reflect": 70},
+    "safety":       {"deliver": 93, "reflect": 78},
+    "adversarial":  {"deliver": 97, "reflect": 92},  # Near-impossible to pass
+    "general":      {"deliver": 58, "reflect": 42},
+    "tier_a_safe":  {"deliver": 50, "reflect": 38},
+    "general_health":    {"deliver": 58, "reflect": 42},
+    "general_legal":     {"deliver": 58, "reflect": 42},
+    "general_financial": {"deliver": 58, "reflect": 42},
 }
 
 
@@ -122,18 +122,20 @@ def run_meta_arbitration(
     if ext_score < 40:
         refusal_chain.append("external_consensus_critically_low")
 
-    # Sovereign veto gate
-    if sovereign_consensus and sovereign_consensus.get("veto_applied"):
-        return MetaArbitrationResult(
-            verdict=FinalVerdict.SILENT,
-            trust_score=0,
-            delivery_confidence="none",
-            primary_refusal_reason="sovereign_judge_veto",
-            refusal_chain=["sovereign_judge_veto"] + refusal_chain,
-            explanation=(
-                f"Silent State Judge veto applied. "
-                f"Reason: {sovereign_consensus.get('veto_reason', 'Insufficient reliability.')}"
-            ),
+    
+# Sovereign veto gate — strengthened
+    if sovereign_consensus:
+        if sovereign_consensus.get("veto_applied") or sovereign_consensus.get("weighted_score", 50) < 30:
+            return MetaArbitrationResult(
+                verdict=FinalVerdict.SILENT,
+                trust_score=0,
+                delivery_confidence="none",
+                primary_refusal_reason="sovereign_judge_veto",
+                refusal_chain=["sovereign_judge_veto"] + refusal_chain,
+                explanation=(
+                    f"Silent State Judge veto applied. "
+                    f"Reason: {sovereign_consensus.get('veto_reason', 'Insufficient reliability.')}"
+                ),
             audit_record=_build_audit_record(
                 prompt, primary_response, 0, "silent",
                 "sovereign_judge_veto",

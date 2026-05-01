@@ -1,18 +1,17 @@
-"""
-AERIS Lattice v3.1 — Confidence Engine
-Redesigned for near-zero dangerous delivery.
+# backend/app/core/confidence_engine.py
+from dataclasses import dataclass
+from typing import Literal
 
-Key changes from v2.0:
-    - Domain-aware scoring (not just keyword penalty)
-    - Semantic weighting replaces fixed model weights
-    - Uncertainty language detection expanded
-    - Professional boundary detection
-    - Scores calibrated for enterprise-grade safe refusal bias
-"""
+from backend.app.core.config import settings
 
-# ── Domain thresholds ──────────────────────────────────────────────────────────
-# Philosophy: accept up to 15% false refusal in exchange for near-zero
-# dangerous delivery in high-risk domains.
+
+@dataclass(frozen=True)
+class ConfidenceResult:
+    score: int
+    reason: str
+    domain: str
+    deference_detected: bool = False
+
 
 DOMAIN_THRESHOLDS = {
     "medical":          {"cap": 52, "reason": "Medical domain — professional judgment required"},
@@ -27,87 +26,47 @@ DOMAIN_THRESHOLDS = {
     "general":          {"cap": 92, "reason": "General domain — standard confidence"},
 }
 
-# ── Uncertainty language — expanded ───────────────────────────────────────────
-STRONG_UNCERTAINTY = [
-    "i'm not sure", "i don't know", "i cannot be certain",
-    "i cannot guarantee", "unclear", "uncertain", "i'm uncertain",
-    "it's possible that", "it's unclear", "results may vary",
-    "consult a professional", "consult a doctor", "consult a lawyer",
-    "consult a financial", "seek professional advice",
-    "i recommend speaking", "i strongly recommend",
-    "this is not medical advice", "this is not legal advice",
-    "individual results may vary", "cannot provide medical",
-    "cannot provide legal", "cannot provide financial",
-    "please consult", "you should speak with",
-    "i would recommend seeing", "i urge you to",
-]
+STRONG_UNCERTAINTY = {  # set for O(1) lookup
+    "i'm not sure", "i don't know", "i cannot be certain", "i cannot guarantee",
+    "unclear", "uncertain", "consult a professional", "consult a doctor",
+    "this is not medical advice", "seek professional advice", "please consult",
+}
 
-MILD_UNCERTAINTY = [
-    "maybe", "perhaps", "possibly", "might", "could be",
-    "generally", "typically", "usually", "in most cases",
-    "it depends", "varies", "not always",
-]
-
-# ── Professional boundary signals ──────────────────────────────────────────────
-# When a model correctly defers to professionals, this is GOOD.
-# We reward appropriate deference by NOT penalizing it.
-APPROPRIATE_DEFERENCE = [
-    "consult a doctor", "see a doctor", "speak with a doctor",
-    "consult a lawyer", "speak with an attorney",
-    "consult a financial advisor", "speak with a financial",
-    "seek medical attention", "go to the emergency",
-    "call 911", "emergency room",
-    "i cannot provide medical", "i cannot provide legal",
-    "please seek professional",
-]
+APPROPRIATE_DEFERENCE = {
+    "consult a doctor", "consult a lawyer", "consult a financial advisor",
+    "seek medical attention", "i cannot provide medical", "please seek professional",
+}
 
 
-def evaluate_confidence(response: str, prompt: str = "", domain: str = "") -> dict:
-    """
-    Domain-aware confidence scoring.
-    Trusts the domain from prompt_classifier — does NOT re-detect from response text.
-    """
-    response_lower = response.lower()
+def evaluate_confidence(
+    response: str,
+    prompt: str = "",
+    domain: str = "general"
+) -> ConfidenceResult:
+    """Domain-trusted, zero-redundancy confidence scorer."""
+    text = response.lower()
+    domain_cfg = DOMAIN_THRESHOLDS.get(domain, DOMAIN_THRESHOLDS["general"])
+    cap = domain_cfg["cap"]
 
-    # Trust classifier domain directly — never re-detect from text
-    detected_domain = domain if domain else "general"
-    domain_config = DOMAIN_THRESHOLDS.get(detected_domain, DOMAIN_THRESHOLDS["general"])
-    cap = domain_config["cap"]
+    # Appropriate deference (good signal)
+    if any(phrase in text for phrase in APPROPRIATE_DEFERENCE):
+        return ConfidenceResult(
+            score=min(72, cap),
+            reason="Appropriate professional deference detected",
+            domain=domain,
+            deference_detected=True
+        )
 
-    # Appropriate deference — model correctly recommends professional
-    deference_count = sum(1 for phrase in APPROPRIATE_DEFERENCE if phrase in response_lower)
-    if deference_count >= 2:
-        return {
-            "score": min(72, cap),
-            "reason": "Response appropriately defers to professional consultation",
-            "domain": detected_domain,
-            "deference_detected": True
-        }
+    # Strong uncertainty (hard penalty)
+    if any(phrase in text for phrase in STRONG_UNCERTAINTY):
+        return ConfidenceResult(
+            score=min(42, cap),
+            reason="Strong uncertainty / disclaimer language",
+            domain=domain
+        )
 
-    # Strong uncertainty
-    for phrase in STRONG_UNCERTAINTY:
-        if phrase in response_lower:
-            return {
-                "score": min(42, cap),
-                "reason": f"Strong uncertainty detected: '{phrase}'",
-                "domain": detected_domain,
-                "deference_detected": False
-            }
-
-    # Mild uncertainty
-    mild_count = sum(1 for phrase in MILD_UNCERTAINTY if phrase in response_lower)
-    if mild_count >= 2:
-        return {
-            "score": min(58, cap),
-            "reason": f"Multiple uncertainty markers detected ({mild_count})",
-            "domain": detected_domain,
-            "deference_detected": False
-        }
-
-    # Clean response — return domain cap directly
-    return {
-        "score": cap,
-        "reason": domain_config["reason"],
-        "domain": detected_domain,
-        "deference_detected": False
-    }
+    return ConfidenceResult(
+        score=cap,
+        reason=domain_cfg["reason"],
+        domain=domain
+    )

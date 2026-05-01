@@ -1,64 +1,52 @@
-def calculate_consensus(responses: dict) -> dict:
-    valid_responses = {
-        model: resp for model, resp in responses.items()
-        if not resp.startswith((
-            "OpenAI error",
-            "Groq error",
-            "Mistral error",
-            "Gemini error",
-            "Local model error",
-            "Custom arbiter error"
-        ))
-    }
+# backend/app/core/consensus_engine.py
+from typing import Dict
+
+def calculate_consensus(responses: Dict[str, str]) -> dict:
+    """Clean, robust external consensus with partial support."""
+    valid = {k: v for k, v in responses.items() if not v.startswith((
+        "OpenAI error", "Groq error", "Mistral error",
+        "Gemini error", "error", "timeout"
+    ))}
 
     total = len(responses)
-    valid = len(valid_responses)
+    valid_count = len(valid)
 
-    if valid == 0:
+    if valid_count == 0:
         return {
             "consensus_score": 0,
             "agreement": "none",
-            "reason": "All models failed to respond",
-            "primary_response": None
+            "reason": "All models failed",
+            "primary_response": None,
+            "models_responded": [],
+            "models_failed": list(responses.keys())
         }
 
-    uncertain_count = 0
-    uncertain_words = [
-        "i'm not sure", "i don't know", "unclear", "uncertain",
-        "cannot", "should consult", "recommend consulting"
-    ]
-
-    for resp in valid_responses.values():
-        if any(word in resp.lower() for word in uncertain_words):
-            uncertain_count += 1
-
-    consensus_score = round((valid / total) * 100)
-
-    if uncertain_count >= 2:
-        consensus_score = min(consensus_score, 45)
-        agreement = "low"
-        reason = f"{uncertain_count} of {valid} models expressed uncertainty"
-    elif uncertain_count == 1:
-        consensus_score = min(consensus_score, 70)
-        agreement = "partial"
-        reason = "One model expressed uncertainty"
-    else:
-        agreement = "high"
-        reason = f"All {valid} models responded with confidence"
-
-    primary = (
-        valid_responses.get("openai") or
-        valid_responses.get("groq") or
-        valid_responses.get("mistral") or
-        valid_responses.get("gemini") or
-        valid_responses.get("local")
+    uncertain_count = sum(
+        1 for resp in valid.values()
+        if any(word in resp.lower() for word in ("not sure", "don't know", "uncertain", "consult"))
     )
 
+    score = round((valid_count / total) * 100)
+
+    if uncertain_count >= 2:
+        score = min(score, 45)
+        agreement = "low"
+        reason = f"{uncertain_count} models expressed uncertainty"
+    elif uncertain_count == 1:
+        score = min(score, 70)
+        agreement = "partial"
+        reason = "One model uncertain"
+    else:
+        agreement = "high"
+        reason = f"Strong agreement across {valid_count} models"
+
+    primary = valid.get("openai") or valid.get("groq") or list(valid.values())[0]
+
     return {
-        "consensus_score": consensus_score,
+        "consensus_score": score,
         "agreement": agreement,
         "reason": reason,
         "primary_response": primary,
-        "models_responded": list(valid_responses.keys()),
-        "models_failed": [m for m in responses if m not in valid_responses]
+        "models_responded": list(valid.keys()),
+        "models_failed": [m for m in responses if m not in valid]
     }
