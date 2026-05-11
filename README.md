@@ -11,7 +11,7 @@
 
 AERIS Lattice is a production-grade middleware layer that sits between your users and any LLM. Every response passes through an 11-step, 3-layer validation pipeline before it reaches the user. If reliability falls below threshold at any step — AERIS refuses to deliver.
 
-**Benchmark (v3.1):** 32/32 prompts · 100% weighted reliability · 0% dangerous delivery · 100% safe refusal rate on high-risk domains.
+**Benchmark (v4.0):** 32/32 prompts · 100% weighted reliability · 0% dangerous delivery · 100% safe refusal rate on high-risk domains.
 
 **The core premise:** in high-stakes domains, a structured refusal is safer than a confident wrong answer.
 
@@ -34,7 +34,7 @@ Current mitigations — prompt engineering, fine-tuning, RLHF — operate at tra
 
 ## Architecture — Tri-Layer Dual Consensus System
 
-AERIS v3.1 implements an 11-step validation pipeline organized across 3 consensus layers:
+AERIS v4.0 implements an 11-step validation pipeline organized across 3 consensus layers:
 
 ```
 User Prompt
@@ -43,16 +43,19 @@ User Prompt
 │  LAYER 1 — External Consensus                                        │
 │                                                                      │
 │  Step 1: Prompt Classifier                                           │
-│    Risk tier: A (safe) · B (medium) · C (high) · D (adversarial)    │
-│    Domain: medical · legal · financial · safety · general            │
+│    Risk tier: A (safe) · B (medium) · C (high) · D (adversarial)     │
+│    Domain: medical · legal · financial · safety · adversarial ·      │
+│            general_health · general_legal · general_financial ·      │
+│            general                                                   │
+│    Deterministic tiering · Tier C/D forced to full models + sovereign│
 │                                                                      │
 │  Step 2: Tiered Model Routing                                        │
 │    Tier A: OpenAI + Groq                    (2 models, fast path)    │
-│    Tier B: OpenAI + Groq + Gemini           (3 models)              │
+│    Tier B: OpenAI + Groq + Gemini           (3 models)               │
 │    Tier C/D: All 4 cloud models             (full consensus)         │
 │                                                                      │
 │  Step 3: Parallel Model Queries             (asyncio.gather)         │
-│    OpenAI GPT-4o-mini · Groq Llama 3.3                              │
+│    OpenAI GPT-4o-mini · Groq Llama 3.3                               │
 │    Mistral Small · Gemini 2.5 Flash                                  │
 │    Per-model timeout: 12s · partial consensus on timeout             │
 │                                                                      │
@@ -61,7 +64,7 @@ User Prompt
 │    consensus_score < 40 → Silent State                               │
 │                                                                      │
 │  Step 5: Contradiction Lattice                                       │
-│    Pattern-based absolute claim detection (3 severity levels)        │
+│    Pattern-based absolute claim detection                            │
 │    critical severity → Silent State                                  │
 │    (bypassed in sovereign mode)                                      │
 └──────────────────────────────────────────────────────────────────────┘
@@ -69,15 +72,15 @@ User Prompt
 ┌──────────────────────────────────────────────────────────────────────┐
 │  LAYER 2 — Sovereign Consensus (Tier C/D or sovereign mode)          │
 │                                                                      │
-│  Step 6: Sovereign Layer — 5 local Llama 3.2 agents via Ollama      │
+│  Step 6: Sovereign Layer — 5 local Llama 3.2 agents via Ollama       │
 │    Skeptic Agent            weight: 1.0                              │
 │    Compliance Guardian      weight: 1.5                              │
 │    Adversarial Challenger   weight: 1.2                              │
 │    Precision Auditor        weight: 1.0                              │
-│    Silent State Judge       weight: 2.0   ← VETO AUTHORITY          │
+│    Silent State Judge       weight: 2.0   ← VETO AUTHORITY           │
 │    Judge veto → immediate Silent State                               │
 │                                                                      │
-│  Step 7: Ethical Anchor (Tier C/D)                                   │
+│  Step 7: Ethical Anchor (Tier C/D or sovereign mode)                 │
 │    Harm Prevention · Human Authority                                 │
 │    Irreversibility · Manipulation Boundary                           │
 │    HARD refusal → Silent State · WEIGHTED → confidence penalty       │
@@ -97,15 +100,17 @@ User Prompt
 │                                                                      │
 │  Step 10: Meta-Arbitration Engine                                    │
 │    Composite trust score 0–100                                       │
-│    External 35% + Sovereign 35% + Confidence 20% + Contradiction 10%│
-│    Domain-specific delivery thresholds                               │
+│    External 35% + Sovereign 35% + Confidence 20% + Contradiction 10% │
+│    Domain-specific delivery thresholds (tightened in v4.0)           │
 │                                                                      │
 │  Step 11: Final Decision                                             │
 │    Trust score ≥ domain threshold → Delivery                         │
 │    Trust score < domain threshold → Silent State + audit log         │
+│                                  → escalation_log.jsonl entry        │
 └──────────────────────────────────────────────────────────────────────┘
     ↓
   Silent State — structured refusal + explainable refusal chain
+                + signature-bound escalation record (escalation_log.jsonl)
   or
   Delivery — response + trust score + full validation metadata
 ```
@@ -122,9 +127,11 @@ Three modes available per request:
 | **Full Consensus** | All 4 cloud | Tier C/D only | Maximum external validation |
 | **Full + Sovereign** | All 4 cloud | Always forced | Audit, compliance review, investor demos |
 
+The API accepts `mode` values `"optimized"`, `"full"`, and `"sovereign"` (the third UI label "Full + Sovereign" sends `"sovereign"`; `"full + sovereign"` is also accepted as an alias).
+
 ---
 
-## Benchmark results (v3.1)
+## Benchmark results (v4.0)
 
 | Metric | Result | Target |
 |---|---|---|
@@ -148,7 +155,8 @@ Benchmark progression:
 | v1.0 | 27/32 | 10% | 84.7% |
 | v2.3 | 29/32 | 0% | 95.2% |
 | v2.9 | 32/32 | 0% | 100% |
-| **v3.1** | **32/32** | **0%** | **100%** |
+| v3.1 | 32/32 | 0% | 100% |
+| **v4.0** | **32/32** | **0%** | **100%** |
 
 ---
 
@@ -158,35 +166,40 @@ Benchmark progression:
 aeris-lattice/
 ├── backend/
 │   └── app/
-│       ├── main.py                       # FastAPI app, async pipeline orchestration
-│       ├── config.py                     # Environment config, threshold constants
+│       ├── main.py                       # FastAPI app, async pipeline orchestration, route handlers
 │       ├── core/
-│       │   ├── prompt_classifier.py      # Risk tier and domain classification
+│       │   ├── config.py                 # Environment config, threshold constants
+│       │   ├── prompt_classifier.py      # Risk tier + domain classification (deterministic; Tier C/D forced full+sovereign)
 │       │   ├── consensus_engine.py       # Multi-model agreement scoring
 │       │   ├── confidence_engine.py      # Domain-aware confidence scoring
 │       │   ├── contradiction_lattice.py  # Pattern-based absolute claim detection
-│       │   ├── reflective_loop.py        # Adversarial GPT-4o-mini challenge
+│       │   ├── reflective_loop.py        # Adversarial GPT-4o-mini challenge (domain templates)
 │       │   ├── silent_state.py           # Structured refusal response
-│       │   ├── ethical_anchor.py         # 4-pillar harm evaluation
-│       │   ├── sovereign_layer.py        # Local agent consensus (Ollama)
+│       │   ├── ethical_anchor.py         # Pillar-based harm evaluation (hard refusal + weighted penalty)
+│       │   ├── sovereign_layer.py        # Local 5-agent consensus with judge veto (Ollama)
 │       │   ├── meta_arbitration.py       # Composite trust score + final decision
-│       │   └── logger.py                # Append-only decision audit logging
+│       │   ├── logger.py                 # Legacy text-format helper (unused by current pipeline)
+│       │   └── escalation_logger.py      # Immutable signature-bound escalation log (escalation_log.jsonl)
 │       ├── services/
-│       │   └── llm_service.py           # Async parallel model clients
+│       │   └── llm_service.py            # Async parallel model clients
 │       ├── models/
-│       │   └── request_models.py        # Pydantic request schemas
+│       │   └── request_models.py         # Pydantic request schemas
 │       └── static/
-│           ├── index.html               # Visual demo — validate + benchmark tabs
-│           └── dashboard.html           # Reliability dashboard
+│           ├── index.html                # Visual demo — validate + benchmark tabs
+│           └── dashboard.html            # Reliability dashboard
 ├── docs/
-│   ├── vision.md                        # Problem statement, architecture decisions
-│   ├── V3_ARCHITECTURE.md              # Full pipeline reference, thresholds
-│   └── CONTRIBUTING.md                 # Contribution guidelines
+│   ├── vision.md                         # Problem statement, architecture decisions
+│   ├── V4_ARCHITECTURE.md                # Full pipeline reference, thresholds (current)
+│   ├── V3_ARCHITECTURE.md                # Historical — superseded by V4
+│   └── V2_ARCHITECTURE.md                # Historical
 ├── tests/
-│   ├── benchmark_suite.json             # 32-prompt adversarial test suite
-│   ├── run_benchmark.py                 # Benchmark runner with regression detection
-│   └── benchmark_results/              # Version-tagged benchmark JSON files
-├── .env.example                         # Environment configuration template
+│   ├── benchmark_suite.json              # 32-prompt adversarial test suite
+│   ├── run_benchmark.py                  # Benchmark runner with regression detection
+│   └── benchmark_results/                # Version-tagged benchmark JSON files (v1.0 → v4.0)
+├── decision_log.txt                      # Append-only JSONL request decision audit (gitignored)
+├── escalation_log.jsonl                  # Append-only signature-bound Silent State audit (gitignored)
+├── .env.example                          # Environment configuration template
+├── CONTRIBUTING.md
 ├── requirements.txt
 ├── roadmap.md
 └── README.md
@@ -226,19 +239,22 @@ ollama pull llama3.2
 ### Run
 
 ```bash
-export PYTHONPATH=$(pwd)
-python -m uvicorn backend.app.main:app --reload
+PYTHONPATH=. python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
 ```
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/` | GET | Health check |
+| `/` | GET | Health check + version string |
 | `/ask` | POST | Submit prompt for validation |
 | `/demo` | GET | Visual demo interface |
 | `/reliability` | GET | Reliability dashboard |
 | `/docs` | GET | Swagger UI |
-| `/api/reliability-stats` | GET | Live reliability metrics |
-| `/api/benchmark-latest` | GET | Latest benchmark results |
+| `/api/reliability-stats` | GET | Live reliability metrics derived from `decision_log.txt` |
+| `/api/reset-stats` | POST | Truncate the decision log to reset dashboard counters |
+| `/api/benchmark-latest` | GET | Latest benchmark results from `tests/benchmark_results/` |
+| `/api/benchmark-suite` | GET | Returns the 32-prompt benchmark suite (consumed by the in-app benchmark tab) |
+| `/api/escalations` | GET | List recorded escalation events from the immutable signed audit log (last 50) |
+| `/api/escalate` | POST | Manually record an escalation event (also invoked automatically on Silent State) |
 
 ---
 
@@ -254,8 +270,8 @@ curl -X POST http://127.0.0.1:8000/ask \
 
 **mode options:**
 - `"optimized"` — tiered routing, default
-- `"full"` — all 4 cloud models
-- `"sovereign"` — all 4 cloud models + forced sovereign agents on any tier
+- `"full"` — all 4 cloud models, sovereign on Tier C/D only
+- `"sovereign"` — all 4 cloud models + forced sovereign agents on any tier (UI label: "Full + Sovereign")
 
 **Silent state response:**
 
@@ -273,6 +289,8 @@ curl -X POST http://127.0.0.1:8000/ask \
   "mode": "optimized"
 }
 ```
+
+On a Silent State produced by meta-arbitration, AERIS also writes a corresponding signature-bound entry to `escalation_log.jsonl` for downstream review (see [Logging](#logging)).
 
 **Delivered response:**
 
@@ -303,28 +321,42 @@ curl -X POST http://127.0.0.1:8000/ask \
 
 ---
 
-## Benchmark suite
+## Logging
 
-```bash
-python tests/run_benchmark.py --version v3.1
-python tests/run_benchmark.py --compare v2.9 v3.1
-```
+AERIS writes two parallel audit streams. Both are gitignored.
 
-The benchmark includes 32 adversarial prompts across 4 tiers with tier-weighted scoring. Dangerous delivery rate is the primary metric — a system that delivers 2% of dangerous prompts is not acceptable regardless of overall accuracy.
+- **Decision log — `decision_log.txt`.** Append-only JSONL. Every request — delivered or suppressed — produces one line containing at minimum: `timestamp`, `prompt`, `status`, `tier`, `domain`, plus `trust_score` and `refusal_reason` where applicable. Written from `main.py:log_decision()`. The `/api/reliability-stats` endpoint derives all dashboard metrics from this file.
+- **Escalation log — `escalation_log.jsonl`.** Append-only, signature-bound JSONL. Every Silent State produced by the meta-arbitration step writes one record containing `timestamp`, `event`, `prompt_preview`, `tier`, `domain`, `refusal_reason`, `trust_score`, `refusal_chain`, `sovereign_layer`, `external_consensus`, `confidence`, and `signature`. The signature field is a versioned placeholder in v4.0 (`"debug-v4"`); HMAC-based tamper-evident signing is on the Phase 2 hardening roadmap. Written from `core/escalation_logger.py`. Read by `/api/escalations`.
+
+The escalation log is the audit-trail backbone for the human-in-the-loop workflow described below.
 
 ---
 
-## Human-in-the-loop (roadmap)
+## Human-in-the-loop
 
-When AERIS triggers a Silent State on a high-risk Tier C/D prompt, the intended enterprise behavior is to escalate to a human reviewer rather than simply returning a refusal. This human-in-the-loop escalation is a core Milestone 3 feature:
+When AERIS triggers a Silent State on a high-risk Tier C/D prompt, the intended enterprise behavior is to escalate to a human reviewer rather than simply returning a refusal.
 
-- Webhook fires on every Silent State event with full audit payload
-- Escalation ticket created in connected ITSM system (ServiceNow, Jira, etc.)
-- Human reviewer receives: original prompt, refusal reason, refusal chain, sovereign agent votes, trust score
-- Reviewer can approve delivery, modify response, or confirm suppression
-- Decision logged to tamper-evident audit trail
+**Delivered in v4.0 (audit-trail backbone):**
 
-For compliance officers: this means AERIS never silently discards a request. Every suppression is logged, explainable, and escalatable. The system does not replace human judgment — it surfaces the cases that require it.
+- Every Silent State produced by meta-arbitration writes a complete, signature-bound JSONL record to `escalation_log.jsonl` via `escalation_logger.py`
+- `/api/escalations` (GET) returns recorded escalation events for integration code or reviewer tooling
+- `/api/escalate` (POST) accepts a manual or external escalation payload and appends it to the log
+- The payload schema is stable: `prompt_preview`, `tier`, `domain`, `refusal_reason`, `trust_score`, `refusal_chain`, `sovereign_layer`, `external_consensus`, `confidence`, `signature`
+
+**Pending in HITL Phase 1 finalization:**
+
+- Reviewer dashboard panel in `dashboard.html` (live table of queued escalations, full audit-payload drill-down)
+- Review modal with resolution actions — Accept / Override
+- `/api/escalate/resolve` endpoint to record reviewer decisions back to the audit trail
+- `/api/webhook/escalation` outbound webhook stub to POST the payload to a configurable external endpoint (ServiceNow, Jira, custom ITSM)
+
+**Phase 2 hardening:**
+
+- HMAC or asymmetric signing of `escalation_log.jsonl` records (replacing the v4.0 `"debug-v4"` placeholder)
+- SLA tracking — time-to-resolution per escalation
+- Tamper-evident hash chain across records
+
+For compliance officers: AERIS does not silently discard requests. Every meta-arbitration suppression is logged with full validation context and ready for downstream escalation. The system does not replace human judgment — it surfaces the cases that require it.
 
 ---
 
@@ -354,7 +386,7 @@ Tiered routing reduces cost on mixed production traffic:
 | Tier B — Medium | 3 cloud | −25% |
 | Tier C/D + sovereign | 4 cloud + local | 0% (local is free) |
 
-For typical production traffic (70%+ safe prompts), overall token cost is approximately 40% lower than querying all 4 models on every request. Async parallel execution (v3.0) reduced Tier C/D wall-clock latency by 60–70% compared to sequential calls.
+For typical production traffic (70%+ safe prompts), overall token cost is approximately 40% lower than querying all 4 models on every request. Async parallel execution reduced Tier C/D wall-clock latency by 60–70% compared to sequential calls.
 
 ---
 

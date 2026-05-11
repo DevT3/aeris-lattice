@@ -36,8 +36,7 @@ ollama pull llama3.2
 Run the server:
 
 ```bash
-export PYTHONPATH=$(pwd)
-python -m uvicorn backend.app.main:app --reload
+PYTHONPATH=. python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
 ```
 
 Run the benchmark to confirm your environment is working:
@@ -55,8 +54,10 @@ A passing environment produces 32/32 with 0% dangerous delivery. If you see fail
 Before contributing, read these documents in order:
 
 - `docs/vision.md` — problem statement, design philosophy, non-goals
-- `docs/V3_ARCHITECTURE.md` — full 11-step pipeline reference, thresholds, mode behavior
+- `docs/V4_ARCHITECTURE.md` — full 11-step pipeline reference, thresholds, mode behavior (current)
 - `README.md` — quickstart, API reference, validation modes
+
+`docs/V2_ARCHITECTURE.md` and `docs/V3_ARCHITECTURE.md` are kept as historical reference and do not reflect current code.
 
 **The most important design principle:** AERIS is biased toward safe refusal over delivery. Any contribution that increases dangerous delivery rate — even slightly — will not be merged regardless of other improvements it brings.
 
@@ -68,20 +69,30 @@ Before contributing, read these documents in order:
 
 ### High priority
 
+**Human-in-the-loop — Phase 1 finalization**
+The v4.0 audit-trail backbone shipped: `escalation_logger.py` writes signature-bound JSONL records on every meta-arbitration Silent State, and `/api/escalations` + `/api/escalate` expose the trail to integration code. What remains for Phase 1:
+
+- `/api/escalate/resolve` — record a reviewer's decision (accept / override / confirm suppression) back to the audit trail
+- `/api/webhook/escalation` — outbound POST to a configurable external endpoint (ServiceNow, Jira, custom ITSM) on every Silent State
+- Reviewer panel in `dashboard.html` — live table of queued escalations with full audit-payload drill-down
+- Review modal — accept / override actions wired to `/api/escalate/resolve`
+
+Phase 2 hardening (separate from Phase 1): replace the v4.0 `"debug-v4"` signature placeholder in `escalation_logger.py` with HMAC or asymmetric signing, and add a tamper-evident hash chain across records.
+
 **Semantic consensus scoring**
-Replace keyword-based agreement detection in `consensus_engine.py` with cosine similarity between model output embeddings. This is the highest-impact reliability improvement remaining. The current keyword approach misses semantic agreement between differently-worded responses.
+Replace keyword-based agreement detection in `consensus_engine.py` with cosine similarity between model output embeddings. This is the highest-impact reliability improvement remaining in Layer 1. The current keyword approach misses semantic agreement between differently-worded responses.
 
 **PostgreSQL decision logging**
-Replace the flat-file `decision_log.txt` with a proper relational store. Schema must preserve all current fields (timestamp, prompt, response excerpt, confidence, status, tier, domain, refusal reason) plus support indexed queries by domain, tier, outcome, and date range. See `backend/app/core/logger.py`.
-
-**Human-in-the-loop escalation API**
-Silent State webhook — when AERIS suppresses a response, POST the full audit payload to a configurable endpoint. Payload should include: prompt, refusal reason, refusal chain, sovereign agent votes, trust score, domain, tier. This is the primary enterprise integration feature. See `roadmap.md` for full specification.
+Replace the flat-file JSONL `decision_log.txt` with a proper relational store. Schema must preserve all current fields (timestamp, prompt, response excerpt, trust score, status, tier, domain, refusal reason) plus support indexed queries by domain, tier, outcome, and date range. The immutable `escalation_log.jsonl` written by `escalation_logger.py` should remain a separate append-only audit stream regardless of where decision logging is migrated.
 
 **Pytest test suite**
-No automated test suite exists beyond the benchmark runner. A pytest suite covering all 11 pipeline steps with mock model responses is a critical gap. Priority: consensus engine, confidence engine, contradiction lattice, ethical anchor, sovereign layer (mock Ollama).
+No automated test suite exists beyond the benchmark runner. A pytest suite covering all 11 pipeline steps with mock model responses is a critical gap. Priority: consensus engine, confidence engine, contradiction lattice, ethical anchor, sovereign layer (mock Ollama), escalation logger (signature and payload integrity).
 
 **Domain-specific safety profiles via JSON**
 Allow domain thresholds to be configured without code changes. A JSON schema for domain profiles that can be loaded at startup and override defaults in `prompt_classifier.py`, `confidence_engine.py`, and `meta_arbitration.py`.
+
+**Classifier calibration on medical/financial Tier C edge cases**
+Some medical and financial prompts are occasionally classified as `tier_d_adversarial` rather than `tier_c_high`. Output is still safe (both tiers force full models + sovereign), but tier accuracy affects routing transparency and dashboard metrics. Targeted keyword-set audits in `prompt_classifier.py` are welcome — submit with a regression test demonstrating the misclassification before and the correct tier after, and a benchmark run showing no impact on dangerous delivery or false refusal rate.
 
 ### Medium priority
 
@@ -144,10 +155,10 @@ This project uses [Conventional Commits](https://www.conventionalcommits.org/):
 ```
 feat: add embedding-based consensus scoring to consensus engine
 fix: sovereign verdict enum serialization — use verdict.value not verdict
-docs: update V3_ARCHITECTURE with async parallel pipeline reference
+docs: update V4_ARCHITECTURE with v4.0 thresholds and escalation logging
 refactor: extract tiered sovereign agent selection into config
 test: add pytest coverage for contradiction lattice severity levels
-bench: v3.1 benchmark results 32/32 100 percent weighted reliability
+bench: v4.0 benchmark results 32/32 100 percent weighted reliability
 chore: update requirements.txt async client dependencies
 ```
 
@@ -182,10 +193,11 @@ Do not use generic messages like `fix bug` or `update code`. Every commit should
 - All enum values serialized as `.value` (string) before including in API responses
 
 **Architecture**
-- New validation layers added to the pipeline in `main.py` and documented in `docs/V3_ARCHITECTURE.md`
+- New validation layers added to the pipeline in `main.py` and documented in `docs/V4_ARCHITECTURE.md`
 - New arbiter integrations must follow the `_model_result()` return structure in `llm_service.py`
 - Threshold changes must be benchmarked and justified — not guessed
-- `sovereign_result` must be initialized to `None` before Step 4 — all early exit returns must include `sovereign_layer=sovereign_result`
+- `sovereign_result` must be initialized to `None` before Step 4 — all early-exit returns must include `sovereign_layer=sovereign_result`
+- Any code path that produces a `FinalVerdict.SILENT` should also write a complete record via `escalation_logger.log_escalation()` — this contract is what makes the audit trail trustworthy
 
 **Sensitive files — highest scrutiny required**
 The following files require the clearest justification for any change:
@@ -194,6 +206,7 @@ The following files require the clearest justification for any change:
 - `meta_arbitration.py` — weight changes affect the composite trust score
 - `sovereign_layer.py` — agent prompt changes affect local validation behavior
 - `ethical_anchor.py` — pillar logic changes affect hard refusal triggers
+- `escalation_logger.py` — signature and JSONL append logic; any change must preserve tamper-evidence guarantees of the existing audit trail
 
 ---
 

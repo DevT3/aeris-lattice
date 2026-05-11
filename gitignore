@@ -1,0 +1,115 @@
+# ── Environment & secrets ─────────────────────────────────────────────
+.env
+.envrc
+
+# ── Python ────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+*.pyo
+
+# ── Virtual environments ──────────────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.pixi/
+__pypackages__/
+
+# ── Distribution & packaging ──────────────────────────────────────────
+build/
+dist/
+*.egg-info/
+*.egg
+MANIFEST
+.installed.cfg
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+
+# ── Testing & coverage ────────────────────────────────────────────────
+.pytest_cache/
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py.cover
+.hypothesis/
+
+# ── Type checkers ─────────────────────────────────────────────────────
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.ruff_cache/
+
+# ── IDE & editor ──────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.spyderproject
+.spyproject
+.ropeproject
+
+# ── OS ────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── AERIS Lattice — runtime files ─────────────────────────────────────
+# Decision audit log — contains user prompts, NEVER commit
+decision_log.txt
+
+# Escalation audit log — contains prompt previews and full validation
+# context for every Silent State, NEVER commit
+escalation_log.jsonl
+
+# Benchmark results ARE committed intentionally for regression tracking
+# DO NOT add tests/benchmark_results/ to this file
+
+# ── Jupyter ───────────────────────────────────────────────────────────
+.ipynb_checkpoints
+*.ipynb
+
+# ── Logs ──────────────────────────────────────────────────────────────
+*.log
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ── Docs build ────────────────────────────────────────────────────────
+docs/_build/
+/site
+
+# ── Misc tooling ──────────────────────────────────────────────────────
+.pdm-python
+.pdm-build/
+.abstra/
+.streamlit/secrets.toml
+marimo/_static/
+marimo/_lsp/
+__marimo__/
+.pypirc
+cython_debug/
+tempCodeRunnerFile.py
+profile_default/
+ipython_config.py

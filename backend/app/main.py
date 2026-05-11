@@ -33,6 +33,7 @@ from backend.app.core.reflective_loop import reflective_review, is_reflection_re
 from backend.app.core.sovereign_layer import run_sovereign_consensus
 from backend.app.core.meta_arbitration import run_meta_arbitration, FinalVerdict
 from backend.app.core.silent_state import enter_silent_state
+from backend.app.core.escalation_logger import log_escalation
 
 
 app = FastAPI(
@@ -227,9 +228,27 @@ async def ask(request: AskRequest):
         classification={"tier": classification.tier.value, "domain": classification.domain},
     )
 
-    # Step 11: Final decision
+            # Step 11: Final decision
     if meta_result.verdict == FinalVerdict.SILENT:
+        print(">>> SILENT STATE BLOCK EXECUTED in main.py")   # ← new loud print
+
         log_decision({"prompt": request.prompt, "status": "silent_state", "refusal_reason": meta_result.primary_refusal_reason, "trust_score": meta_result.trust_score, "tier": classification.tier.value, "domain": classification.domain})
+
+        # ── NEW: Trigger Human-in-the-Loop escalation logging ──
+        escalation_payload = {
+            "prompt_preview": request.prompt[:200],
+            "tier": classification.tier.value,
+            "domain": classification.domain,
+            "refusal_reason": meta_result.primary_refusal_reason,
+            "trust_score": meta_result.trust_score,
+            "refusal_chain": meta_result.refusal_chain,
+            "sovereign_layer": sovereign_result,
+            "external_consensus": external_consensus,
+            "confidence": confidence.__dict__ if 'confidence' in locals() else {},
+        }
+        print(">>> ABOUT TO CALL log_escalation() FROM MAIN.PY")
+        log_escalation(escalation_payload)
+
         return silent_response(all_model_responses, classification.tier.value, classification.domain, external_consensus, meta_result.trust_score, meta_result.primary_refusal_reason, usage_summary, total_latency_ms, model_stats, mode, refusal_chain=meta_result.refusal_chain, sovereign_layer=sovereign_result, prompt_preview=request.prompt[:200])
 
     # Delivered
@@ -253,6 +272,7 @@ async def ask(request: AskRequest):
         "usage": usage_summary,
         "total_latency_ms": total_latency_ms,
     }
+
 @app.get("/api/reliability-stats")
 def reliability_stats():
     """Parse decision_log.txt and return real live stats (no hardcoding)"""
@@ -356,3 +376,23 @@ def reset_stats():
         return {"status": "success", "message": "Stats reset successfully"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+@app.get("/api/escalations")
+def list_escalations():
+    """Return all pending Human-in-the-Loop escalations"""
+    try:
+        with open("escalation_log.jsonl", "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        records = [json.loads(line.strip()) for line in lines if line.strip()]
+        return {"total": len(records), "escalations": records[-50:]}  # last 50
+    except FileNotFoundError:
+        return {"total": 0, "escalations": []}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/escalate")
+async def escalate(request: dict):
+    """Manual escalation endpoint (for external systems)"""
+    log_escalation(request)
+    return {"status": "escalated", "message": "Human-in-the-Loop escalation logged"}
