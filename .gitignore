@@ -80,6 +80,10 @@ desktop.ini
 # Decision audit log — contains user prompts, NEVER commit
 decision_log.txt
 
+# Escalation audit log — contains prompt previews and full validation
+# context for every Silent State, NEVER commit
+escalation_log.jsonl
+
 # Benchmark results ARE committed intentionally for regression tracking
 # DO NOT add tests/benchmark_results/ to this file
 
